@@ -15,6 +15,7 @@ from ai.incident_graph import analyze_incident_relationships
 from ai.language_model import (
     BaseLanguageModelAdapter,
     ConfigurableLLMAdapter,
+    GeminiLanguageModelAdapter,
     MockLanguageModelAdapter,
     RuleBasedFallbackAdapter,
     get_language_model_adapter,
@@ -30,6 +31,7 @@ from ai.schemas import (
     EscalationLevel,
     EvacuationRecommendation,
     EvacuationRoute,
+    GeminiIncidentExtractionSchema,
     IncidentRelationship,
     IncidentReport,
     IncidentStatus,
@@ -43,6 +45,7 @@ from ai.schemas import (
     SituationAnalysisResult,
     UncertaintyLevel,
 )
+
 
 __all__ = [
     # Primary public interface
@@ -63,6 +66,7 @@ __all__ = [
     # Adapters
     "BaseLanguageModelAdapter",
     "RuleBasedFallbackAdapter",
+    "GeminiLanguageModelAdapter",
     "MockLanguageModelAdapter",
     "ConfigurableLLMAdapter",
     # Configurations
@@ -81,6 +85,7 @@ __all__ = [
     "DEPARTMENT_MAPPING",
     "IncidentReport",
     "NLUStructuredExtraction",
+    "GeminiIncidentExtractionSchema",
     "RiskAssessmentResult",
     "DecisionSupportPlan",
     "ResourceRecord",

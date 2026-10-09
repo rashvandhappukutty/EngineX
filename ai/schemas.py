@@ -6,6 +6,56 @@ import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
+from pydantic import BaseModel, Field
+
+
+class GeminiIncidentExtractionSchema(BaseModel):
+    """Structured extraction format returned by Google Gemini for incident reports."""
+    summary: str = Field(
+        ...,
+        description="Concise factual summary of the incident problem as reported."
+    )
+    candidate_categories: List[str] = Field(
+        default_factory=list,
+        description="One or more candidate incident categories (e.g., 'IT and Network', 'Maintenance and Electrical', 'Medical and Safety', 'Security', 'Needs Assessment', 'Other', etc.)."
+    )
+    explicit_facts: List[str] = Field(
+        default_factory=list,
+        description="Facts explicitly stated by the reporter (do not invent unstated facts)."
+    )
+    possible_hazards: List[str] = Field(
+        default_factory=list,
+        description="Possible hazards and supporting text mentioned in the report."
+    )
+    reported_location: Optional[str] = Field(
+        default=None,
+        description="Reported physical location or building/room name, if mentioned."
+    )
+    reported_affected_count: Optional[int] = Field(
+        default=None,
+        description="Explicitly reported count of affected people or students, if stated."
+    )
+    urgency_indicators: List[str] = Field(
+        default_factory=list,
+        description="Specific words or conditions indicating urgency (e.g., 'smoke', 'fumes', 'active leak', 'injury')."
+    )
+    missing_or_ambiguous_info: List[str] = Field(
+        default_factory=list,
+        description="Key details missing from the report or ambiguous aspects needing clarification."
+    )
+    contradictory_statements: List[str] = Field(
+        default_factory=list,
+        description="Any contradictory statements or conflicting cues found in the report."
+    )
+    uncertainty_level: str = Field(
+        default="Medium",
+        description="Estimated uncertainty level of the interpretation: 'Low', 'Medium', or 'High'."
+    )
+    explanation: str = Field(
+        default="",
+        description="Concise rationale explaining the model's interpretation without inventing external context."
+    )
+
 
 
 class ComplaintCategory(str, Enum):

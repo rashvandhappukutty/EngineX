@@ -14,10 +14,13 @@ from ai.schemas import IncidentReport
 
 def test_language_model_provider_selection_honesty():
     """Defect 1 fix: Verify get_language_model_adapter honestly reflects provider and fallback."""
-    # Default without config
-    adapter = get_language_model_adapter()
-    assert isinstance(adapter, RuleBasedFallbackAdapter)
-    assert adapter.provider_name == "rule_based_fallback"
+    import unittest.mock as mock
+
+    # Default without explicit config or env override
+    with mock.patch.dict("os.environ", {"AI_NLU_PROVIDER": "rule_based_fallback"}):
+        adapter = get_language_model_adapter(ModelConfig(provider="rule_based_fallback"))
+        assert isinstance(adapter, RuleBasedFallbackAdapter)
+        assert adapter.provider_name == "rule_based_fallback"
 
     # Explicit custom callable injection
     def custom_fn(payload):

@@ -268,12 +268,26 @@ def assess_risk(
         missing_info.append("Verified count of individuals in immediate vicinity")
     if is_crit_safety:
         missing_info.append("Current hazard containment status and presence of casualties")
+    if nlu_extraction and nlu_extraction.missing_critical_information:
+        for mi in nlu_extraction.missing_critical_information:
+            if mi not in missing_info:
+                missing_info.append(mi)
 
     # Uncertainty Analysis
     uncertainty_level = UncertaintyLevel.LOW
-    if classification.confidence < 0.45 or classification.is_ambiguous or classification.is_unfamiliar:
+    if (
+        classification.confidence < 0.45
+        or classification.is_ambiguous
+        or classification.is_unfamiliar
+        or (nlu_extraction and nlu_extraction.confidence < 0.45)
+        or (nlu_extraction and bool(nlu_extraction.conflicting_or_contradictory_elements))
+    ):
         uncertainty_level = UncertaintyLevel.HIGH
-    elif classification.confidence < 0.70 or len(missing_info) >= 2:
+    elif (
+        classification.confidence < 0.70
+        or len(missing_info) >= 2
+        or (nlu_extraction and nlu_extraction.confidence < 0.70)
+    ):
         uncertainty_level = UncertaintyLevel.MEDIUM
 
     # Determine Human Review Requirement
