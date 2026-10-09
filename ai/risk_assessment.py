@@ -27,11 +27,33 @@ from ai.schemas import (
 )
 
 
-def _check_benign_context(text: str) -> bool:
-    """Check if safety keywords appear purely within routine or educational context."""
-    text_lower = text.lower()
-    for benign_phrase in BENIGN_SAFETY_CONTEXTS:
-        if benign_phrase in text_lower:
+def _is_negated(text: str, keyword: str) -> bool:
+    """
+    Check if a specific hazard keyword is explicitly negated in the text.
+    (e.g., 'no fire', 'without smoke', 'no chemical leak', 'false alarm - no injuries').
+    """
+    negation_patterns = [
+        rf"\b(?:no|not|without|zero|false alarm|no sign of|clear of|no active)\s+(?:\w+\s+){{0,2}}{re.escape(keyword)}\b",
+        rf"\b{re.escape(keyword)}\s+(?:is not|was not|not present|has been cleared|ruled out)\b",
+    ]
+    for pat in negation_patterns:
+        if re.search(pat, text):
+            return True
+    return False
+
+
+def _has_separate_active_emergency(text: str) -> bool:
+    """
+    Check if text contains explicit cues of a real, active emergency even if 'fire drill' is mentioned.
+    """
+    active_hazard_cues = [
+        "actual fire", "real fire", "real smoke", "actual smoke", "actual flames",
+        "smoke pouring", "chemical reaction", "uncontrolled", "flames erupted",
+        "erupted", "out of control", "injured", "casualty", "fainted", "unconscious",
+        "screaming", "explosion", "acid spill", "real emergency", "active fire",
+    ]
+    for cue in active_hazard_cues:
+        if cue in text:
             return True
     return False
 
@@ -41,39 +63,59 @@ def _evaluate_safety_threats(
     tokens: Set[str],
 ) -> Tuple[bool, bool, List[str]]:
     """
-    Evaluate immediate life-safety hazards and compound emergencies.
+    Evaluate immediate life-safety hazards, accounting for fine-grained negation and drill contexts.
+
+    Returns:
+        (is_critical_safety, is_high_safety, matched_safety_rules)
     """
     matched_rules: List[str] = []
-    is_benign = _check_benign_context(combined_text)
+    text_lower = combined_text.lower()
 
-    if is_benign:
-        return False, False, ["Safety keyword mentioned in routine/educational context (e.g. fire drill)"]
+    # Check benign context (e.g. fire drill notice)
+    is_benign_phrase_present = any(bp in text_lower for bp in BENIGN_SAFETY_CONTEXTS)
+    has_active_emergency = _has_separate_active_emergency(text_lower)
+
+    # If it's a routine fire drill notice with NO separate active emergency cues, suppress false alarm
+    if is_benign_phrase_present and not has_active_emergency:
+        return False, False, ["Safety keyword mentioned in routine/educational context (e.g. fire drill notice)"]
 
     is_crit = False
     is_high = False
 
     # 1. Critical safety threats
     for kw in CRITICAL_SAFETY_KEYWORDS:
+        if _is_negated(text_lower, kw):
+            continue
+
         if " " in kw:
-            if kw in combined_text:
+            if kw in text_lower:
                 is_crit = True
                 matched_rules.append(f"Critical safety hazard detected: '{kw}'")
         else:
             if kw in tokens:
+                # If keyword is 'fire' or 'smoke' and in drill phrase, only trigger if active emergency verified
+                if kw in ["fire", "smoke", "flames"] and is_benign_phrase_present and not has_active_emergency:
+                    continue
                 is_crit = True
                 matched_rules.append(f"Critical safety hazard detected: '{kw}'")
 
     # 2. Compound chemical/gas hazards
     chemical_terms = {"acid", "chemical", "chemicals", "reagent", "gas"}
     hazard_actions = {"spill", "leak", "burn", "explosion", "fumes", "reaction"}
-    if (chemical_terms & tokens) and (hazard_actions & tokens):
+    active_chem = {t for t in chemical_terms if t in tokens and not _is_negated(text_lower, t)}
+    active_hazard = {t for t in hazard_actions if t in tokens and not _is_negated(text_lower, t)}
+
+    if active_chem and active_hazard:
         is_crit = True
         matched_rules.append("Critical laboratory chemical/gas hazard detected")
 
     # 3. High safety threats
     for kw in HIGH_SAFETY_KEYWORDS:
+        if _is_negated(text_lower, kw):
+            continue
+
         if " " in kw:
-            if kw in combined_text:
+            if kw in text_lower:
                 is_high = True
                 matched_rules.append(f"High-risk safety indicator detected: '{kw}'")
         else:
@@ -85,8 +127,9 @@ def _evaluate_safety_threats(
     elevator_terms = {"elevator", "lift"}
     entrapment_terms = {"stuck", "trapped", "unresponsive", "broken"}
     if (elevator_terms & tokens) and (entrapment_terms & tokens):
-        is_high = True
-        matched_rules.append("High-risk infrastructure entrapment/failure detected (elevator issue)")
+        if not _is_negated(text_lower, "stuck") and not _is_negated(text_lower, "trapped"):
+            is_high = True
+            matched_rules.append("High-risk infrastructure entrapment/failure detected (elevator issue)")
 
     return is_crit, is_high, matched_rules
 
@@ -142,7 +185,7 @@ def assess_risk(
     # 3. Disruption Modifiers
     disruption_score = 0
     for pattern, weight in DISRUPTION_KEYWORDS.items():
-        if pattern in combined_text:
+        if pattern in combined_text and not _is_negated(combined_text, pattern):
             disruption_score += weight
             risk_factors.append(f"Disruption modifier '{pattern}': +{weight} pts")
     score_adjustments.append(disruption_score)
@@ -150,6 +193,8 @@ def assess_risk(
     # 4. Urgency Tone Modifiers
     urgency_score = 0
     for term, weight in URGENCY_MODIFIERS.items():
+        if _is_negated(combined_text, term):
+            continue
         if " " in term:
             if term in combined_text:
                 urgency_score += weight
@@ -187,7 +232,7 @@ def assess_risk(
         if nlu_extraction.estimated_affected_count and nlu_extraction.estimated_affected_count > 50:
             score_adjustments.append(15)
             risk_factors.append(f"High population impact (~{nlu_extraction.estimated_affected_count} people affected): +15 pts")
-        if any(w in words for w in ["spreading", "expanding", "escalating", "out of control"]):
+        if any(w in words for w in ["spreading", "expanding", "escalating", "out of control"]) and not _is_negated(combined_text, "spreading"):
             score_adjustments.append(20)
             risk_factors.append("Active incident escalation / spread detected: +20 pts")
 
@@ -232,7 +277,6 @@ def assess_risk(
         uncertainty_level = UncertaintyLevel.MEDIUM
 
     # Determine Human Review Requirement
-    # Uncertainty NEVER reduces priority for potential emergencies; it increases need for human review!
     requires_human_review = False
     if is_crit_safety or is_high_safety:
         requires_human_review = True
@@ -280,5 +324,4 @@ def assess_risk(
     )
 
 
-# Alias for backwards compatibility
 calculate_priority = assess_risk

@@ -14,6 +14,12 @@ from ai.schemas import IncidentReport, NLUStructuredExtraction
 class BaseLanguageModelAdapter(ABC):
     """Abstract interface for language model providers and extractors."""
 
+    @property
+    @abstractmethod
+    def provider_name(self) -> str:
+        """Return the identifier of the active NLU provider."""
+        pass
+
     @abstractmethod
     def extract_structured_information(
         self, report: IncidentReport
@@ -29,6 +35,10 @@ class RuleBasedFallbackAdapter(BaseLanguageModelAdapter):
     and identifies missing information without requiring external APIs or GPUs.
     """
 
+    @property
+    def provider_name(self) -> str:
+        return "rule_based_fallback"
+
     def extract_structured_information(
         self, report: IncidentReport
     ) -> NLUStructuredExtraction:
@@ -40,7 +50,7 @@ class RuleBasedFallbackAdapter(BaseLanguageModelAdapter):
                 affected_services=[],
                 estimated_affected_count=None,
                 urgency_indicators=[],
-                known_facts=[],
+                known_facts=["Active NLU Provider: Deterministic rule-based fallback (No external LLM connected)"],
                 assumptions_or_inferences=[],
                 conflicting_or_contradictory_elements=["Report contains no textual details"],
                 missing_critical_information=["Incident description", "Exact location", "Severity"],
@@ -111,7 +121,9 @@ class RuleBasedFallbackAdapter(BaseLanguageModelAdapter):
         detected_urgencies = [term for term in urgency_terms if term in lower_text]
 
         # 6. Facts vs Assumptions vs Contradictions
-        known_facts: List[str] = []
+        known_facts: List[str] = [
+            "Active NLU Provider: Deterministic rule-based fallback (No external LLM connected)"
+        ]
         assumptions: List[str] = []
         contradictions: List[str] = []
         missing_info: List[str] = []
@@ -129,7 +141,7 @@ class RuleBasedFallbackAdapter(BaseLanguageModelAdapter):
             if cue in lower_text:
                 assumptions.append(f"Report contains tentative inference using phrase '{cue}'")
 
-        # Detect contradictions (e.g., safe vs dangerous, working vs not working)
+        # Detect contradictions
         if "no problem" in lower_text and any(u in detected_urgencies for u in ["fire", "smoke", "flames", "emergency"]):
             contradictions.append("Report mentions safety hazard alongside statement of 'no problem'")
 
@@ -175,6 +187,10 @@ class MockLanguageModelAdapter(BaseLanguageModelAdapter):
         self.should_fail_malformed = should_fail_malformed
         self.fallback = RuleBasedFallbackAdapter()
 
+    @property
+    def provider_name(self) -> str:
+        return "mock"
+
     def extract_structured_information(
         self, report: IncidentReport
     ) -> NLUStructuredExtraction:
@@ -205,6 +221,10 @@ class ConfigurableLLMAdapter(BaseLanguageModelAdapter):
         self.config = config or ModelConfig()
         self.fallback = RuleBasedFallbackAdapter()
 
+    @property
+    def provider_name(self) -> str:
+        return self.config.provider if self.llm_callable else "rule_based_fallback"
+
     def extract_structured_information(
         self, report: IncidentReport
     ) -> NLUStructuredExtraction:
@@ -219,13 +239,16 @@ class ConfigurableLLMAdapter(BaseLanguageModelAdapter):
             if not isinstance(response_dict, dict) or "primary_problem" not in response_dict:
                 raise ValueError("Model response failed schema validation: missing 'primary_problem'")
 
+            known_facts = response_dict.get("known_facts", [])
+            known_facts.insert(0, f"Active NLU Provider: Connected Language Model ({self.config.provider})")
+
             return NLUStructuredExtraction(
                 primary_problem=response_dict.get("primary_problem", "Reported incident"),
                 identified_locations=response_dict.get("identified_locations", []),
                 affected_services=response_dict.get("affected_services", []),
                 estimated_affected_count=response_dict.get("estimated_affected_count"),
                 urgency_indicators=response_dict.get("urgency_indicators", []),
-                known_facts=response_dict.get("known_facts", []),
+                known_facts=known_facts,
                 assumptions_or_inferences=response_dict.get("assumptions_or_inferences", []),
                 conflicting_or_contradictory_elements=response_dict.get("conflicting_or_contradictory_elements", []),
                 missing_critical_information=response_dict.get("missing_critical_information", []),
@@ -244,11 +267,26 @@ class ConfigurableLLMAdapter(BaseLanguageModelAdapter):
 
 def get_language_model_adapter(
     config: Optional[ModelConfig] = None,
+    custom_callable: Optional[Callable[[str], Dict[str, Any]]] = None,
 ) -> BaseLanguageModelAdapter:
-    """Factory creating the appropriate language understanding adapter based on config."""
+    """
+    Factory creating the appropriate language understanding adapter based on config and callable.
+
+    Args:
+        config: Optional ModelConfig specifying provider name and thresholds.
+        custom_callable: Optional user-injected model inference callable.
+
+    Returns:
+        ConfigurableLLMAdapter, MockLanguageModelAdapter, or RuleBasedFallbackAdapter.
+    """
     cfg = config or ModelConfig()
-    if cfg.provider == "rule_based_fallback":
-        return RuleBasedFallbackAdapter()
+
+    if custom_callable is not None:
+        return ConfigurableLLMAdapter(llm_callable=custom_callable, config=cfg)
+
+    if cfg.provider == "custom_llm":
+        return ConfigurableLLMAdapter(llm_callable=None, config=cfg)
     if cfg.provider == "mock":
         return MockLanguageModelAdapter()
+
     return RuleBasedFallbackAdapter()

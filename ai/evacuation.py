@@ -25,6 +25,11 @@ def _dijkstra_safest_path(
     if start in blocked_nodes:
         return None
 
+    # Strict check on start node accessibility if accessibility is required
+    if requires_accessible:
+        if not accessibility_map or start not in accessibility_map or not accessibility_map.get(start, False):
+            return None
+
     # Priority queue stores (distance, current_node, path)
     pq: List[tuple[float, str, List[str]]] = [(0.0, start, [start])]
     visited: Dict[str, float] = {}
@@ -61,9 +66,9 @@ def _dijkstra_safest_path(
             if neighbor in blocked_nodes:
                 continue
 
-            # Accessibility check
-            if requires_accessible and accessibility_map:
-                if not accessibility_map.get(neighbor, True):
+            # Strict accessibility check: require positive True annotation
+            if requires_accessible:
+                if not accessibility_map or neighbor not in accessibility_map or not accessibility_map.get(neighbor, False):
                     continue
 
             new_dist = dist + weight
@@ -123,7 +128,7 @@ def recommend_evacuation_routes(
     # Parse graph structure
     raw_edges = map_data.get("edges", [])
     raw_exits = set(map_data.get("exits", []))
-    accessibility_map = map_data.get("accessible_nodes", {})
+    accessibility_map = map_data.get("accessible_nodes", None)
 
     graph: Dict[str, Dict[str, float]] = {}
     for edge in raw_edges:
@@ -164,6 +169,37 @@ def recommend_evacuation_routes(
             rationale="No verified emergency exits registered in campus map data.",
         )
 
+    # Case: Accessibility required but accessibility data is missing or insufficient
+    if requires_accessible and (not accessibility_map or not isinstance(accessibility_map, dict)):
+        # Check if a non-accessible path exists to inform connectivity status
+        standard_route = _dijkstra_safest_path(
+            graph=graph,
+            start=start_location,
+            exits=raw_exits,
+            blocked_nodes=blocked_set,
+            accessibility_map=None,
+            requires_accessible=False,
+        )
+        connectivity_status = (
+            "Standard route connectivity exists, but step-free accessibility cannot be verified due to missing accessibility topology data."
+            if standard_route
+            else "No connected route to exits exists."
+        )
+        return EvacuationRecommendation(
+            is_evacuation_advised=True,
+            safe_route_verified=False,
+            routes=[],
+            blocked_or_hazardous_zones=list(blocked_set),
+            accessibility_notes=["Accessibility topology annotations missing from map data."],
+            limitations_and_disclaimers=disclaimers + [
+                "Accessibility requirement cannot be verified without step-free annotations."
+            ],
+            rationale=(
+                f"ACCESSIBILITY UNVERIFIED from '{start_location}'. {connectivity_status} "
+                "Consult approved campus emergency procedures and contact authorized emergency coordinators."
+            ),
+        )
+
     # Calculate optimal safe path
     route = _dijkstra_safest_path(
         graph=graph,
@@ -175,6 +211,32 @@ def recommend_evacuation_routes(
     )
 
     if not route:
+        # Check if standard route exists without accessibility
+        if requires_accessible:
+            standard_route = _dijkstra_safest_path(
+                graph=graph,
+                start=start_location,
+                exits=raw_exits,
+                blocked_nodes=blocked_set,
+                accessibility_map=None,
+                requires_accessible=False,
+            )
+            if standard_route:
+                return EvacuationRecommendation(
+                    is_evacuation_advised=True,
+                    safe_route_verified=False,
+                    routes=[],
+                    blocked_or_hazardous_zones=list(blocked_set),
+                    accessibility_notes=["Standard path exists with non-accessible stairs or barriers; no step-free route found."],
+                    limitations_and_disclaimers=disclaimers + [
+                        "Standard corridor connectivity exists but does not meet step-free accessibility requirements."
+                    ],
+                    rationale=(
+                        f"NO STEP-FREE ROUTE VERIFIED from '{start_location}'. Connected corridors include non-accessible stairs or obstacles. "
+                        "Consult approved campus emergency procedures and contact authorized emergency coordinators for assistance."
+                    ),
+                )
+
         return EvacuationRecommendation(
             is_evacuation_advised=True,
             safe_route_verified=False,
@@ -185,8 +247,9 @@ def recommend_evacuation_routes(
                 "All known paths to exits are obstructed by active hazard zones or physical blockages."
             ],
             rationale=(
-                f"NO SAFE ROUTE VERIFIED from '{start_location}'. All standard corridors intersect active hazards ({', '.join(blocked_set)}). "
-                "Recommend immediate shelter-in-place, door sealing, and priority dispatch of Emergency Response Team."
+                f"NO SAFE ROUTE VERIFIED from '{start_location}'. All known paths intersect active hazard zones or physical blockages "
+                f"({', '.join(blocked_set) if blocked_set else 'No accessible paths'}). "
+                "Consult approved campus emergency procedures and contact authorized emergency coordinators for instructions."
             ),
         )
 
