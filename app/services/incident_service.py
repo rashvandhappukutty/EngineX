@@ -3,7 +3,7 @@ from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
-from app.db.models import Incident, IncidentHistory, Location, Hazard
+from app.db.models import Incident, IncidentHistory, Location, Hazard, Assignment, AssignmentHistory, Team
 from app.schemas.incidents import (
     IncidentCreate,
     IncidentUpdate,
@@ -13,6 +13,8 @@ from app.schemas.incidents import (
     IncidentCategory,
     VALID_INCIDENT_TRANSITIONS,
 )
+from app.schemas.assignments import AssignmentStatus
+from app.schemas.teams import TeamAvailabilityStatus
 from app.services.prioritization_service import prioritization_service
 from app.services.classification_service import classification_service
 from app.services.notification_service import notification_manager
@@ -172,7 +174,60 @@ class IncidentService:
                 change_reason=update_in.reason or f"Status changed from {prev_status} to {update_in.status}",
             )
             db.add(history_entry)
-            db.commit()  # Single atomic commit for status update and history entry
+
+            # Automatically update active response team assignments and release teams when incident is Resolved or Cancelled
+            if update_in.status in (IncidentStatus.RESOLVED, IncidentStatus.CANCELLED):
+                active_assignments = db.query(Assignment).filter(
+                    Assignment.incident_id == incident.id,
+                    Assignment.status.in_([
+                        AssignmentStatus.ASSIGNED,
+                        AssignmentStatus.DISPATCHED,
+                        AssignmentStatus.ON_SCENE,
+                    ]),
+                ).all()
+
+                target_assignment_status = (
+                    AssignmentStatus.COMPLETED
+                    if update_in.status == IncidentStatus.RESOLVED
+                    else AssignmentStatus.CANCELLED
+                )
+
+                team_ids_to_check = set()
+
+                for assignment in active_assignments:
+                    prev_asgn_status = assignment.status
+                    assignment.status = target_assignment_status
+                    team_ids_to_check.add(assignment.team_id)
+
+                    asgn_history = AssignmentHistory(
+                        assignment_id=assignment.id,
+                        previous_status=prev_asgn_status,
+                        new_status=target_assignment_status,
+                        notes=(
+                            f"Incident #{incident.id} {update_in.status.value.lower()}: "
+                            f"status automatically updated to {target_assignment_status.value}"
+                        ),
+                    )
+                    db.add(asgn_history)
+
+                # Update team availability to Available if team has no other active assignments and is On_Mission
+                for team_id in team_ids_to_check:
+                    team = db.query(Team).filter(Team.id == team_id).first()
+                    if team:
+                        remaining_active = db.query(Assignment).filter(
+                            Assignment.team_id == team.id,
+                            Assignment.incident_id != incident.id,
+                            Assignment.status.in_([
+                                AssignmentStatus.ASSIGNED,
+                                AssignmentStatus.DISPATCHED,
+                                AssignmentStatus.ON_SCENE,
+                            ]),
+                        ).count()
+
+                        if remaining_active == 0 and team.availability_status == TeamAvailabilityStatus.ON_MISSION:
+                            team.availability_status = TeamAvailabilityStatus.AVAILABLE
+
+            db.commit()  # Single atomic commit for incident status update, incident history, assignment updates, assignment histories, and team availability updates
         except Exception:
             db.rollback()
             raise

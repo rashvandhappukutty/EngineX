@@ -25,13 +25,15 @@ class IncidentStatus(str, Enum):
     INVESTIGATING = "Investigating"
     RESPONDING = "Responding"
     RESOLVED = "Resolved"
+    CANCELLED = "Cancelled"
 
 
 VALID_INCIDENT_TRANSITIONS = {
-    IncidentStatus.REPORTED: {IncidentStatus.INVESTIGATING, IncidentStatus.RESPONDING, IncidentStatus.RESOLVED},
-    IncidentStatus.INVESTIGATING: {IncidentStatus.RESPONDING, IncidentStatus.RESOLVED},
-    IncidentStatus.RESPONDING: {IncidentStatus.RESOLVED},
+    IncidentStatus.REPORTED: {IncidentStatus.INVESTIGATING, IncidentStatus.RESPONDING, IncidentStatus.RESOLVED, IncidentStatus.CANCELLED},
+    IncidentStatus.INVESTIGATING: {IncidentStatus.RESPONDING, IncidentStatus.RESOLVED, IncidentStatus.CANCELLED},
+    IncidentStatus.RESPONDING: {IncidentStatus.RESOLVED, IncidentStatus.CANCELLED},
     IncidentStatus.RESOLVED: {IncidentStatus.INVESTIGATING},  # Reopen if needed
+    IncidentStatus.CANCELLED: set(),
 }
 
 
