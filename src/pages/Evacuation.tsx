@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useDemo } from "../store/demoState";
+import { useDemo, CAMPUS_NODE_LAYOUT } from "../store/demoState";
 import {
   Route as RouteIcon,
   AlertTriangle,
@@ -263,25 +263,28 @@ export default function Evacuation() {
             <span className="text-[11px] text-slate-500">Click any edge line to toggle blockage</span>
           </div>
 
-          <div className="relative w-full h-[520px] bg-slate-50 rounded-xl border border-slate-200 overflow-hidden flex items-center justify-center">
-            <svg viewBox="0 0 900 550" className="w-full h-full select-none">
+          <div className="relative w-full h-[540px] bg-slate-50/80 rounded-xl border border-slate-200 overflow-hidden flex items-center justify-center p-2">
+            <svg viewBox="0 0 920 560" className="w-full h-full select-none">
               <defs>
-                <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#3978F6" />
-                  <stop offset="100%" stopColor="#2563EB" />
+                <pattern id="evacGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#F1F5F9" strokeWidth="1" />
+                </pattern>
+                <linearGradient id="corridorGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#3B82F6" />
+                  <stop offset="100%" stopColor="#1D4ED8" />
                 </linearGradient>
+                <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.06" />
+                </filter>
               </defs>
 
-              {/* Walkway Edges */}
-              {campusEdges.map((edge, idx) => {
-                const src = allNodes.find((n) => n.id === edge.source);
-                const tgt = allNodes.find((n) => n.id === edge.target);
-                if (!src || !tgt) return null;
+              {/* Background Architectural Grid */}
+              <rect width="100%" height="100%" fill="url(#evacGrid)" rx="10" />
 
-                const srcX = (src as any).coordinates?.x || 100;
-                const srcY = (src as any).coordinates?.y || 100;
-                const tgtX = (tgt as any).coordinates?.x || 200;
-                const tgtY = (tgt as any).coordinates?.y || 200;
+              {/* Walkway Connector Edges */}
+              {campusEdges.map((edge, idx) => {
+                const srcPos = CAMPUS_NODE_LAYOUT[edge.source] || { cx: 100, cy: 100 };
+                const tgtPos = CAMPUS_NODE_LAYOUT[edge.target] || { cx: 200, cy: 200 };
 
                 // Is edge part of computed path?
                 const isPathEdge =
@@ -294,122 +297,223 @@ export default function Evacuation() {
                     );
                   });
 
+                const midX = (srcPos.cx + tgtPos.cx) / 2;
+                const midY = (srcPos.cy + tgtPos.cy) / 2;
+
                 return (
                   <g
-                    key={`edge-${idx}`}
+                    key={`edge-${edge.id || idx}`}
                     onClick={() => toggleEdgeBlock(edge.id)}
                     className="cursor-pointer group"
                   >
+                    {/* Glowing underlay for active route */}
+                    {isPathEdge && (
+                      <line
+                        x1={srcPos.cx}
+                        y1={srcPos.cy}
+                        x2={tgtPos.cx}
+                        y2={tgtPos.cy}
+                        stroke="#93C5FD"
+                        strokeWidth="12"
+                        strokeOpacity="0.45"
+                        strokeLinecap="round"
+                      />
+                    )}
+
+                    {/* Main walkway line */}
                     <line
-                      x1={srcX + 50}
-                      y1={srcY + 30}
-                      x2={tgtX + 50}
-                      y2={tgtY + 30}
+                      x1={srcPos.cx}
+                      y1={srcPos.cy}
+                      x2={tgtPos.cx}
+                      y2={tgtPos.cy}
                       stroke={
                         edge.blocked
                           ? "#DC2626"
                           : isPathEdge
-                          ? "#3978F6"
+                          ? "#2563EB"
                           : "#CBD5E1"
                       }
-                      strokeWidth={isPathEdge ? "6" : edge.blocked ? "3" : "2"}
-                      strokeDasharray={edge.blocked ? "6,4" : isPathEdge ? "none" : "3,3"}
+                      strokeWidth={isPathEdge ? "5" : edge.blocked ? "3" : "2.5"}
+                      strokeDasharray={edge.blocked ? "6,4" : isPathEdge ? "none" : "4,4"}
                       strokeLinecap="round"
                       className="transition-all duration-200"
                     />
-                    {/* Distance label pill */}
-                    <circle
-                      cx={(srcX + tgtX) / 2 + 50}
-                      cy={(srcY + tgtY) / 2 + 30}
-                      r="12"
-                      fill={edge.blocked ? "#FEE2E2" : "#FFFFFF"}
-                      stroke={edge.blocked ? "#DC2626" : "#E2E8F0"}
-                      strokeWidth="1"
-                    />
-                    <text
-                      x={(srcX + tgtX) / 2 + 50}
-                      y={(srcY + tgtY) / 2 + 34}
-                      textAnchor="middle"
-                      fill={edge.blocked ? "#DC2626" : "#64748B"}
-                      fontSize="9"
-                      fontWeight="bold"
-                    >
-                      {edge.blocked ? "X" : `${edge.distance}m`}
-                    </text>
+
+                    {/* Edge distance & status pill badge */}
+                    <g transform={`translate(${midX}, ${midY})`}>
+                      <rect
+                        x="-18"
+                        y="-10"
+                        width="36"
+                        height="20"
+                        rx="10"
+                        fill={edge.blocked ? "#FEE2E2" : isPathEdge ? "#EFF6FF" : "#FFFFFF"}
+                        stroke={edge.blocked ? "#DC2626" : isPathEdge ? "#2563EB" : "#CBD5E1"}
+                        strokeWidth={isPathEdge ? "1.5" : "1"}
+                        filter="url(#shadow)"
+                      />
+                      <text
+                        x="0"
+                        y="3.5"
+                        textAnchor="middle"
+                        fill={edge.blocked ? "#DC2626" : isPathEdge ? "#1D4ED8" : "#64748B"}
+                        fontSize="9"
+                        fontWeight="700"
+                        fontFamily="sans-serif"
+                      >
+                        {edge.blocked ? "BLOCKED" : `${edge.distance}m`}
+                      </text>
+                    </g>
                   </g>
                 );
               })}
 
-              {/* Graph Nodes */}
+              {/* Graph Nodes (Buildings & Assembly Points) */}
               {allNodes.map((node) => {
+                const layout = CAMPUS_NODE_LAYOUT[node.id] || {
+                  x: 40,
+                  y: 40,
+                  width: 180,
+                  height: 85,
+                  label: node.name,
+                };
                 const isStart = node.id === startNodeId;
                 const isEnd = node.id === endNodeId;
                 const isInPath = primaryRoute?.path.includes(node.id);
                 const isAssembly = node.id.startsWith("AP");
-                const posX = (node as any).coordinates?.x || 100;
-                const posY = (node as any).coordinates?.y || 100;
+                const hasHazard = incidents.some(
+                  (i) => i.buildingId === node.id && !["resolved", "closed"].includes(i.status)
+                );
+
+                const fill = isStart
+                  ? "#EFF6FF"
+                  : isEnd
+                  ? "#ECFDF5"
+                  : hasHazard
+                  ? "#FEF2F2"
+                  : isInPath
+                  ? "#F8FAFC"
+                  : "#FFFFFF";
+
+                const stroke = isStart
+                  ? "#2563EB"
+                  : isEnd
+                  ? "#059669"
+                  : hasHazard
+                  ? "#DC2626"
+                  : isInPath
+                  ? "#3B82F6"
+                  : "#CBD5E1";
+
+                const strokeWidth = isStart || isEnd ? "2.5" : isInPath ? "2" : "1.5";
 
                 return (
                   <g
                     key={node.id}
-                    transform={`translate(${posX}, ${posY})`}
+                    transform={`translate(${layout.x}, ${layout.y})`}
                     onClick={() => {
                       if (isAssembly) setEndNodeId(node.id);
                       else setStartNodeId(node.id);
                     }}
-                    className="cursor-pointer"
+                    className="cursor-pointer group"
+                    filter="url(#shadow)"
                   >
+                    {/* Active Hazard Background Halo */}
+                    {hasHazard && (
+                      <rect
+                        x="-4"
+                        y="-4"
+                        width={layout.width + 8}
+                        height={layout.height + 8}
+                        rx="14"
+                        fill="none"
+                        stroke="#DC2626"
+                        strokeWidth="2"
+                        strokeDasharray="4,4"
+                        className="animate-pulse"
+                      />
+                    )}
+
+                    {/* Node Card Rectangle */}
                     <rect
                       x="0"
                       y="0"
-                      width="100"
-                      height="60"
-                      rx="8"
-                      fill={
-                        isStart
-                          ? "#EFF6FF"
-                          : isEnd
-                          ? "#ECFDF5"
-                          : isInPath
-                          ? "#F8FAFC"
-                          : "#FFFFFF"
-                      }
-                      stroke={
-                        isStart
-                          ? "#3978F6"
-                          : isEnd
-                          ? "#10B981"
-                          : isInPath
-                          ? "#3978F6"
-                          : "#CBD5E1"
-                      }
-                      strokeWidth={isStart || isEnd ? "2.5" : isInPath ? "2" : "1"}
-                      className="transition-all duration-200"
+                      width={layout.width}
+                      height={layout.height}
+                      rx="10"
+                      fill={fill}
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      className="transition-all duration-150"
                     />
+
+                    {/* Top Row: Type Tag & Status */}
                     <text
-                      x="10"
-                      y="22"
-                      fill={isStart ? "#1D4ED8" : isEnd ? "#047857" : "#0F172A"}
-                      fontSize="11"
-                      fontWeight="bold"
-                      fontFamily="sans-serif"
-                    >
-                      {(node as any).code || node.name}
-                    </text>
-                    <text
-                      x="10"
-                      y="38"
-                      fill="#64748B"
+                      x="12"
+                      y="18"
+                      fill={isAssembly ? "#047857" : hasHazard ? "#DC2626" : "#64748B"}
                       fontSize="9"
+                      fontWeight="700"
                       fontFamily="sans-serif"
                     >
-                      {isAssembly ? "Safe Zone" : `${(node as any).currentOccupancy || 0} Occupants`}
+                      {isAssembly
+                        ? "SAFE ASSEMBLY ZONE"
+                        : `${((node as any).code || node.id).toUpperCase()} • ${(node as any).type || "FACILITY"}`}
                     </text>
+
+                    {/* Node Name */}
+                    <text
+                      x="12"
+                      y="36"
+                      fill={isStart ? "#1E40AF" : isEnd ? "#065F46" : "#0F172A"}
+                      fontSize="12"
+                      fontWeight="700"
+                      fontFamily="sans-serif"
+                    >
+                      {node.name.length > 22 ? `${node.name.slice(0, 21)}…` : node.name}
+                    </text>
+
+                    {/* Bottom Metric / Subtext */}
+                    <text
+                      x="12"
+                      y="54"
+                      fill={isAssembly ? "#059669" : "#64748B"}
+                      fontSize="9.5"
+                      fontWeight="500"
+                      fontFamily="sans-serif"
+                    >
+                      {isAssembly
+                        ? `Designated Safe Zone • Cap: ${(node as any).capacity || 800}`
+                        : `Occupants: ${(node as any).occupancy || (node as any).currentOccupancy || 0} / ${(node as any).capacity || 500}`}
+                    </text>
+
+                    {/* Status Pill Badges */}
                     {isStart && (
-                      <circle cx="85" cy="18" r="5" fill="#3978F6" />
+                      <g transform={`translate(${layout.width - 64}, 8)`}>
+                        <rect x="0" y="0" width="56" height="18" rx="9" fill="#2563EB" />
+                        <text x="28" y="12" textAnchor="middle" fill="#FFFFFF" fontSize="8" fontWeight="bold">
+                          ORIGIN
+                        </text>
+                      </g>
                     )}
+
                     {isEnd && (
-                      <circle cx="85" cy="18" r="5" fill="#10B981" />
+                      <g transform={`translate(${layout.width - 64}, 8)`}>
+                        <rect x="0" y="0" width="56" height="18" rx="9" fill="#059669" />
+                        <text x="28" y="12" textAnchor="middle" fill="#FFFFFF" fontSize="8" fontWeight="bold">
+                          TARGET
+                        </text>
+                      </g>
+                    )}
+
+                    {hasHazard && !isStart && !isEnd && (
+                      <g transform={`translate(${layout.width - 24}, 8)`}>
+                        <circle cx="8" cy="8" r="9" fill="#DC2626" className="animate-ping opacity-60" />
+                        <circle cx="8" cy="8" r="9" fill="#DC2626" />
+                        <text x="8" y="12" textAnchor="middle" fill="#FFFFFF" fontSize="10" fontWeight="bold">
+                          !
+                        </text>
+                      </g>
                     )}
                   </g>
                 );

@@ -65,9 +65,11 @@ export interface Building {
   maxCapacity?: number;
   evacuationTime?: string;
   type: string;
-  coordinates: { x: number; y: number }; // Percentage 0-100 for SVG positioning
+  coordinates: { x: number; y: number };
   width: number;
   height: number;
+  lat?: number;
+  lng?: number;
 }
 
 export type DispatchStatus =
@@ -131,6 +133,8 @@ export interface AssemblyPoint {
   name: string;
   capacity?: number;
   coordinates: { x: number; y: number };
+  lat?: number;
+  lng?: number;
 }
 
 export interface CampusEdge {
@@ -183,116 +187,213 @@ export interface DemoState {
 
 const defaultUser: User | null = null;
 
+// Standard non-overlapping 920x560 campus spatial coordinates
+export const CAMPUS_NODE_LAYOUT: Record<
+  string,
+  { x: number; y: number; width: number; height: number; cx: number; cy: number; label: string }
+> = {
+  // Column 1 (West Campus)
+  B9:  { x: 40,  y: 40,  width: 180, height: 85, cx: 130, cy: 82.5,  label: "Sports Complex" },
+  AP1: { x: 40,  y: 160, width: 180, height: 65, cx: 130, cy: 192.5, label: "AP-1 West Ground" },
+  B3:  { x: 40,  y: 260, width: 180, height: 85, cx: 130, cy: 302.5, label: "Science Laboratory" },
+  B8:  { x: 40,  y: 385, width: 180, height: 85, cx: 130, cy: 427.5, label: "Auditorium" },
+
+  // Column 2 (Academic Core)
+  AP3: { x: 260, y: 40,  width: 180, height: 65, cx: 350, cy: 72.5,  label: "AP-3 North Plaza" },
+  B2:  { x: 260, y: 160, width: 180, height: 85, cx: 350, cy: 202.5, label: "Engineering Block" },
+  B4:  { x: 260, y: 285, width: 180, height: 85, cx: 350, cy: 327.5, label: "Central Library" },
+
+  // Column 3 (Administration & Hub)
+  B5:  { x: 480, y: 40,  width: 180, height: 85, cx: 570, cy: 82.5,  label: "Hostel A (Men's)" },
+  B1:  { x: 480, y: 160, width: 180, height: 85, cx: 570, cy: 202.5, label: "Main Block" },
+  B10: { x: 480, y: 385, width: 180, height: 80, cx: 570, cy: 425.0, label: "Main Security Gate" },
+
+  // Column 4 (East Campus & Dining)
+  B6:  { x: 700, y: 40,  width: 180, height: 85, cx: 790, cy: 82.5,  label: "Hostel B (Women's)" },
+  B7:  { x: 700, y: 160, width: 180, height: 85, cx: 790, cy: 202.5, label: "Student Cafeteria" },
+  AP2: { x: 700, y: 285, width: 180, height: 65, cx: 790, cy: 317.5, label: "AP-2 East Quad" },
+};
+
 const defaultBuildings: Building[] = [
   {
     id: "B1",
     name: "Main Block",
+    code: "ADM-100",
+    floors: 4,
     status: "safe",
     occupancy: 350,
+    currentOccupancy: 350,
     capacity: 500,
+    maxCapacity: 500,
+    evacuationTime: "4.2 min",
     type: "Admin",
-    coordinates: { x: 50, y: 80 },
-    width: 12,
-    height: 8,
+    coordinates: { x: 480, y: 160 },
+    width: 180,
+    height: 85,
+    lat: 11.1085,
+    lng: 77.3411,
   },
   {
     id: "B2",
     name: "Engineering Block",
+    code: "ENG-200",
+    floors: 4,
     status: "safe",
     occupancy: 420,
+    currentOccupancy: 420,
     capacity: 600,
+    maxCapacity: 600,
+    evacuationTime: "5.1 min",
     type: "Academic",
-    coordinates: { x: 30, y: 50 },
-    width: 15,
-    height: 10,
+    coordinates: { x: 260, y: 160 },
+    width: 180,
+    height: 85,
+    lat: 11.1092,
+    lng: 77.3402,
   },
   {
     id: "B3",
     name: "Science Laboratory",
+    code: "SCI-300",
+    floors: 3,
     status: "evacuating",
     occupancy: 120,
+    currentOccupancy: 120,
     capacity: 200,
-    type: "Academic",
-    coordinates: { x: 30, y: 30 },
-    width: 10,
-    height: 8,
+    maxCapacity: 200,
+    evacuationTime: "2.8 min",
+    type: "Laboratory",
+    coordinates: { x: 40, y: 260 },
+    width: 180,
+    height: 85,
+    lat: 11.1098,
+    lng: 77.3395,
   },
   {
     id: "B4",
-    name: "Library",
+    name: "Central Library",
+    code: "LIB-400",
+    floors: 2,
     status: "safe",
     occupancy: 210,
+    currentOccupancy: 210,
     capacity: 300,
+    maxCapacity: 300,
+    evacuationTime: "3.4 min",
     type: "Academic",
-    coordinates: { x: 50, y: 50 },
-    width: 12,
-    height: 12,
+    coordinates: { x: 260, y: 285 },
+    width: 180,
+    height: 85,
+    lat: 11.1080,
+    lng: 77.3400,
   },
   {
     id: "B5",
-    name: "Hostel A",
+    name: "Hostel A (Men's)",
+    code: "HST-A",
+    floors: 4,
     status: "safe",
     occupancy: 380,
+    currentOccupancy: 380,
     capacity: 400,
+    maxCapacity: 400,
+    evacuationTime: "6.0 min",
     type: "Residential",
-    coordinates: { x: 75, y: 30 },
-    width: 10,
-    height: 15,
+    coordinates: { x: 480, y: 40 },
+    width: 180,
+    height: 85,
+    lat: 11.1100,
+    lng: 77.3425,
   },
   {
     id: "B6",
-    name: "Hostel B",
+    name: "Hostel B (Women's)",
+    code: "HST-B",
+    floors: 4,
     status: "safe",
     occupancy: 350,
+    currentOccupancy: 350,
     capacity: 400,
+    maxCapacity: 400,
+    evacuationTime: "5.8 min",
     type: "Residential",
-    coordinates: { x: 90, y: 30 },
-    width: 10,
-    height: 15,
+    coordinates: { x: 700, y: 40 },
+    width: 180,
+    height: 85,
+    lat: 11.1105,
+    lng: 77.3432,
   },
   {
     id: "B7",
-    name: "Cafeteria",
+    name: "Student Cafeteria",
+    code: "CAF-700",
+    floors: 2,
     status: "safe",
     occupancy: 180,
+    currentOccupancy: 180,
     capacity: 250,
+    maxCapacity: 250,
+    evacuationTime: "2.5 min",
     type: "Facility",
-    coordinates: { x: 70, y: 60 },
-    width: 12,
-    height: 8,
+    coordinates: { x: 700, y: 160 },
+    width: 180,
+    height: 85,
+    lat: 11.1075,
+    lng: 77.3420,
   },
   {
     id: "B8",
     name: "Auditorium",
+    code: "AUD-800",
+    floors: 2,
     status: "safe",
     occupancy: 50,
+    currentOccupancy: 50,
     capacity: 800,
+    maxCapacity: 800,
+    evacuationTime: "4.5 min",
     type: "Facility",
-    coordinates: { x: 15, y: 70 },
-    width: 18,
-    height: 12,
+    coordinates: { x: 40, y: 385 },
+    width: 180,
+    height: 85,
+    lat: 11.1070,
+    lng: 77.3390,
   },
   {
     id: "B9",
     name: "Sports Complex",
+    code: "SPT-900",
+    floors: 2,
     status: "safe",
     occupancy: 85,
+    currentOccupancy: 85,
     capacity: 300,
+    maxCapacity: 300,
+    evacuationTime: "3.0 min",
     type: "Facility",
-    coordinates: { x: 15, y: 15 },
-    width: 20,
-    height: 15,
+    coordinates: { x: 40, y: 40 },
+    width: 180,
+    height: 85,
+    lat: 11.1110,
+    lng: 77.3385,
   },
   {
     id: "B10",
-    name: "Main Gate",
+    name: "Main Security Gate",
+    code: "SEC-01",
+    floors: 1,
     status: "safe",
     occupancy: 5,
+    currentOccupancy: 5,
     capacity: 20,
+    maxCapacity: 20,
+    evacuationTime: "0.5 min",
     type: "Security",
-    coordinates: { x: 50, y: 95 },
-    width: 6,
-    height: 4,
+    coordinates: { x: 480, y: 385 },
+    width: 180,
+    height: 80,
+    lat: 11.1060,
+    lng: 77.3410,
   },
 ];
 
@@ -627,8 +728,30 @@ const defaultState: DemoState = {
     },
   ],
   assemblyPoints: [
-    { id: "AP1", name: "Assembly Point 1", coordinates: { x: 20, y: 85 } },
-    { id: "AP2", name: "Assembly Point 2", coordinates: { x: 85, y: 80 } },
+    {
+      id: "AP1",
+      name: "Assembly Point 1 (West Field)",
+      capacity: 1000,
+      coordinates: { x: 40, y: 160 },
+      lat: 11.1105,
+      lng: 77.3380,
+    },
+    {
+      id: "AP2",
+      name: "Assembly Point 2 (East Quad Green)",
+      capacity: 800,
+      coordinates: { x: 700, y: 285 },
+      lat: 11.1070,
+      lng: 77.3435,
+    },
+    {
+      id: "AP3",
+      name: "Assembly Point 3 (North Gate Plaza)",
+      capacity: 600,
+      coordinates: { x: 260, y: 40 },
+      lat: 11.1115,
+      lng: 77.3405,
+    },
   ],
   campusEdges: [
     {
@@ -643,7 +766,7 @@ const defaultState: DemoState = {
       id: "E2",
       source: "B2",
       target: "B3",
-      distance: 20,
+      distance: 25,
       accessible: true,
       blocked: false,
     }, // Eng to Science
@@ -659,7 +782,7 @@ const defaultState: DemoState = {
       id: "E4",
       source: "B4",
       target: "B7",
-      distance: 20,
+      distance: 45,
       accessible: true,
       blocked: false,
     }, // Library to Cafe
@@ -675,7 +798,7 @@ const defaultState: DemoState = {
       id: "E6",
       source: "B5",
       target: "B6",
-      distance: 15,
+      distance: 20,
       accessible: true,
       blocked: false,
     }, // Hostel A to B
@@ -683,7 +806,7 @@ const defaultState: DemoState = {
       id: "E7",
       source: "B6",
       target: "AP2",
-      distance: 50,
+      distance: 25,
       accessible: true,
       blocked: false,
     }, // Hostel B to AP2
@@ -691,7 +814,7 @@ const defaultState: DemoState = {
       id: "E8",
       source: "B7",
       target: "AP2",
-      distance: 25,
+      distance: 15,
       accessible: true,
       blocked: false,
     }, // Cafe to AP2
@@ -699,7 +822,7 @@ const defaultState: DemoState = {
       id: "E9",
       source: "B3",
       target: "B8",
-      distance: 40,
+      distance: 20,
       accessible: true,
       blocked: false,
     }, // Science to Auditorium
@@ -707,7 +830,7 @@ const defaultState: DemoState = {
       id: "E10",
       source: "B8",
       target: "AP1",
-      distance: 15,
+      distance: 25,
       accessible: true,
       blocked: false,
     }, // Auditorium to AP1
@@ -715,7 +838,7 @@ const defaultState: DemoState = {
       id: "E11",
       source: "B2",
       target: "B8",
-      distance: 25,
+      distance: 35,
       accessible: true,
       blocked: false,
     }, // Eng to Auditorium
@@ -723,7 +846,7 @@ const defaultState: DemoState = {
       id: "E12",
       source: "B1",
       target: "B10",
-      distance: 15,
+      distance: 25,
       accessible: true,
       blocked: false,
     }, // Main to Gate
@@ -731,10 +854,42 @@ const defaultState: DemoState = {
       id: "E13",
       source: "B3",
       target: "B4",
-      distance: 30,
+      distance: 25,
       accessible: true,
       blocked: false,
     }, // Science to Library
+    {
+      id: "E14",
+      source: "B9",
+      target: "AP1",
+      distance: 15,
+      accessible: true,
+      blocked: false,
+    }, // Sports to AP1
+    {
+      id: "E15",
+      source: "B9",
+      target: "AP3",
+      distance: 25,
+      accessible: true,
+      blocked: false,
+    }, // Sports to AP3
+    {
+      id: "E16",
+      source: "AP3",
+      target: "B2",
+      distance: 20,
+      accessible: true,
+      blocked: false,
+    }, // AP3 to Eng
+    {
+      id: "E17",
+      source: "AP3",
+      target: "B5",
+      distance: 25,
+      accessible: true,
+      blocked: false,
+    }, // AP3 to Hostel A
   ],
   alerts: [
     {

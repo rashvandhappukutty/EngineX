@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { SeverityBadge, StatusBadge, ThreatScoreBadge } from "../components/common/Badge";
 import { StatCard } from "../components/common/StatCard";
+import { CAMPUS_NODE_LAYOUT } from "../store/demoState";
 
 export default function CommandCenter() {
   const {
@@ -27,6 +28,7 @@ export default function CommandCenter() {
     responders,
     resources,
     assemblyPoints,
+    campusEdges,
     selectedIncidentId,
     setSelectedIncidentId,
     refreshAIAnalysis,
@@ -243,199 +245,281 @@ export default function CommandCenter() {
               className="relative w-full h-full flex items-center justify-center transition-transform duration-200"
               style={{ transform: `scale(${zoom})` }}
             >
-              <svg viewBox="0 0 100 100" className="w-[90%] h-[90%] select-none overflow-visible">
-                {/* Staff Duty Zones (Translucent Green Polygons) */}
+              <svg viewBox="0 0 920 560" className="w-[95%] h-[95%] select-none overflow-visible">
+                <defs>
+                  <pattern id="cmdGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#F1F5F9" strokeWidth="1" />
+                  </pattern>
+                  <radialGradient id="cmdHazardGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#DC2626" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#DC2626" stopOpacity="0.0" />
+                  </radialGradient>
+                </defs>
+
+                <rect width="100%" height="100%" fill="url(#cmdGrid)" rx="10" />
+
+                {/* Staff Duty Zones (Subtle bounded perimeter markers) */}
                 {showZones && (
-                  <>
-                    <polygon
-                      points="10,10 40,10 40,45 10,45"
+                  <g className="transition-opacity duration-300">
+                    {/* Zone West Outline */}
+                    <rect
+                      x="25"
+                      y="25"
+                      width="425"
+                      height="510"
                       fill="#10B981"
-                      fillOpacity="0.08"
+                      fillOpacity="0.03"
                       stroke="#10B981"
-                      strokeWidth="0.4"
-                      strokeDasharray="1,1"
+                      strokeWidth="1.5"
+                      strokeDasharray="6,4"
+                      rx="12"
                     />
-                    <text x="12" y="14" fontSize="1.6" fill="#059669" fontWeight="bold">
-                      Zone North (Security Patrol)
+                    <text x="38" y="525" fill="#059669" fontSize="10" fontWeight="700" fontFamily="sans-serif">
+                      ZONE WEST • Academic Labs & Emergency Staging
                     </text>
 
-                    <polygon
-                      points="55,55 95,55 95,95 55,95"
-                      fill="#10B981"
-                      fillOpacity="0.08"
-                      stroke="#10B981"
-                      strokeWidth="0.4"
-                      strokeDasharray="1,1"
+                    {/* Zone East Outline */}
+                    <rect
+                      x="465"
+                      y="25"
+                      width="430"
+                      height="510"
+                      fill="#3978F6"
+                      fillOpacity="0.03"
+                      stroke="#3978F6"
+                      strokeWidth="1.5"
+                      strokeDasharray="6,4"
+                      rx="12"
                     />
-                    <text x="58" y="59" fontSize="1.6" fill="#059669" fontWeight="bold">
-                      Zone South (Medical / Staging)
+                    <text x="478" y="525" fill="#2563EB" fontSize="10" fontWeight="700" fontFamily="sans-serif">
+                      ZONE EAST • Residential Hostels, Dining & Fleet Logistics
                     </text>
-                  </>
+                  </g>
                 )}
 
-                {/* Campus Roads & Arterials */}
-                <path
-                  d="M 0 55 C 40 55, 60 45, 100 45"
-                  fill="none"
-                  stroke="#E2E8F0"
-                  strokeWidth="3.5"
-                />
-                <path
-                  d="M 45 0 L 45 100"
-                  fill="none"
-                  stroke="#E2E8F0"
-                  strokeWidth="3.5"
-                />
+                {/* Campus Walkways */}
+                {campusEdges &&
+                  campusEdges.map((edge) => {
+                    const srcPos = CAMPUS_NODE_LAYOUT[edge.source] || { cx: 100, cy: 100 };
+                    const tgtPos = CAMPUS_NODE_LAYOUT[edge.target] || { cx: 200, cy: 200 };
 
-                {/* Evacuation Route Lines */}
-                {showRoutes && (
-                  <>
-                    <path
-                      d="M 25 30 L 45 50 L 20 85"
-                      fill="none"
-                      stroke="#3978F6"
-                      strokeWidth="1.6"
-                      strokeDasharray="2,1"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M 75 35 L 45 50 L 85 80"
-                      fill="none"
-                      stroke="#3978F6"
-                      strokeWidth="1.2"
-                      strokeDasharray="1.5,1.5"
-                      strokeLinecap="round"
-                    />
-                  </>
+                    return (
+                      <line
+                        key={`cmd-edge-${edge.id}`}
+                        x1={srcPos.cx}
+                        y1={srcPos.cy}
+                        x2={tgtPos.cx}
+                        y2={tgtPos.cy}
+                        stroke={edge.blocked ? "#DC2626" : "#E2E8F0"}
+                        strokeWidth={edge.blocked ? "2.5" : "2"}
+                        strokeDasharray={edge.blocked ? "4,4" : "none"}
+                        strokeLinecap="round"
+                      />
+                    );
+                  })}
+
+                {/* Evacuation Highlight Route */}
+                {showRoutes && selectedIncident && (
+                  <path
+                    d={`M 130 302.5 L 130 427.5 L 130 192.5`}
+                    fill="none"
+                    stroke="#2563EB"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                    strokeDasharray="8,4"
+                    className="animate-pulse"
+                  />
                 )}
 
                 {/* Assembly Points */}
-                {assemblyPoints.map((ap) => (
-                  <g key={ap.id}>
-                    <circle
-                      cx={ap.coordinates.x}
-                      cy={ap.coordinates.y}
-                      r="3.5"
-                      fill="#ECFDF5"
-                      stroke="#10B981"
-                      strokeWidth="0.8"
-                    />
-                    <text
-                      x={ap.coordinates.x}
-                      y={ap.coordinates.y + 0.6}
-                      fontSize="1.5"
-                      textAnchor="middle"
-                      fill="#047857"
-                      fontWeight="bold"
-                    >
-                      {ap.name.replace("Assembly Point ", "AP-")}
-                    </text>
-                  </g>
-                ))}
-
-                {/* Buildings */}
-                {buildings.map((b) => {
-                  const isSelected = selectedBuilding?.id === b.id;
-                  const hasIncident = activeIncidents.some(
-                    (i) => i.buildingId === b.id
-                  );
-                  const isCritical = activeIncidents.some(
-                    (i) => i.buildingId === b.id && i.severity === "critical"
-                  );
+                {assemblyPoints.map((ap) => {
+                  const layout = CAMPUS_NODE_LAYOUT[ap.id] || {
+                    x: ap.coordinates.x,
+                    y: ap.coordinates.y,
+                    width: 180,
+                    height: 65,
+                  };
 
                   return (
                     <g
-                      key={b.id}
+                      key={`cmd-${ap.id}`}
+                      transform={`translate(${layout.x}, ${layout.y})`}
+                      className="cursor-pointer"
+                    >
+                      <rect
+                        x="0"
+                        y="0"
+                        width={layout.width}
+                        height={layout.height}
+                        rx="10"
+                        fill="#ECFDF5"
+                        stroke="#10B981"
+                        strokeWidth="1.5"
+                      />
+                      <circle cx="24" cy={layout.height / 2} r="12" fill="#10B981" />
+                      <text
+                        x="24"
+                        y={layout.height / 2 + 4}
+                        textAnchor="middle"
+                        fill="#FFFFFF"
+                        fontSize="9"
+                        fontWeight="bold"
+                      >
+                        {ap.id}
+                      </text>
+                      <text
+                        x="44"
+                        y={layout.height / 2 - 3}
+                        fill="#065F46"
+                        fontSize="11"
+                        fontWeight="700"
+                        fontFamily="sans-serif"
+                      >
+                        {ap.name.length > 18 ? `${ap.name.slice(0, 17)}…` : ap.name}
+                      </text>
+                      <text
+                        x="44"
+                        y={layout.height / 2 + 13}
+                        fill="#059669"
+                        fontSize="9"
+                        fontWeight="500"
+                        fontFamily="sans-serif"
+                      >
+                        Designated Assembly Safe Zone
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Buildings */}
+                {buildings.map((b) => {
+                  const layout = CAMPUS_NODE_LAYOUT[b.id] || {
+                    x: 480,
+                    y: 160,
+                    width: 180,
+                    height: 85,
+                  };
+                  const isSelected = selectedBuilding?.id === b.id;
+                  const bIncidents = activeIncidents.filter((i) => i.buildingId === b.id);
+                  const hasIncident = bIncidents.length > 0;
+                  const isCritical = bIncidents.some((i) => i.severity === "critical");
+
+                  const fill = isSelected
+                    ? "#EFF6FF"
+                    : isCritical
+                    ? "#FEF2F2"
+                    : hasIncident
+                    ? "#FFF7ED"
+                    : "#FFFFFF";
+
+                  const stroke = isSelected
+                    ? "#2563EB"
+                    : isCritical
+                    ? "#DC2626"
+                    : hasIncident
+                    ? "#F97316"
+                    : "#CBD5E1";
+
+                  const strokeWidth = isSelected ? "2.5" : hasIncident ? "2" : "1.5";
+
+                  return (
+                    <g
+                      key={`cmd-bld-${b.id}`}
+                      transform={`translate(${layout.x}, ${layout.y})`}
                       className="cursor-pointer group"
                       onClick={() => {
                         const incInB = activeIncidents.find((i) => i.buildingId === b.id);
                         if (incInB) setSelectedIncidentId(incInB.id);
                       }}
                     >
-                      {/* Building Footprint */}
+                      {/* Active Hazard Background Halo */}
+                      {hasIncident && (
+                        <circle
+                          cx={layout.width / 2}
+                          cy={layout.height / 2}
+                          r="65"
+                          fill="url(#cmdHazardGlow)"
+                          stroke="#DC2626"
+                          strokeWidth="1.5"
+                          strokeDasharray="4,4"
+                          className="animate-pulse"
+                        />
+                      )}
+
+                      {/* Building Footprint Card */}
                       <rect
-                        x={b.coordinates.x - b.width / 2}
-                        y={b.coordinates.y - b.height / 2}
-                        width={b.width}
-                        height={b.height}
-                        rx="1.5"
-                        fill={
-                          isCritical
-                            ? "#FEF2F2"
-                            : hasIncident
-                            ? "#FFF7ED"
-                            : isSelected
-                            ? "#EFF6FF"
-                            : "#FFFFFF"
-                        }
-                        stroke={
-                          isCritical
-                            ? "#DC2626"
-                            : hasIncident
-                            ? "#F97316"
-                            : isSelected
-                            ? "#3978F6"
-                            : "#CBD5E1"
-                        }
-                        strokeWidth={isSelected ? "1.4" : "0.8"}
-                        className="transition-all"
+                        x="0"
+                        y="0"
+                        width={layout.width}
+                        height={layout.height}
+                        rx="10"
+                        fill={fill}
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
+                        className="transition-all duration-150"
                       />
+
+                      {/* Code & Type */}
+                      <text
+                        x="12"
+                        y="18"
+                        fill={isCritical ? "#DC2626" : isSelected ? "#2563EB" : "#64748B"}
+                        fontSize="9"
+                        fontWeight="700"
+                        fontFamily="sans-serif"
+                      >
+                        {(b.code || b.id).toUpperCase()} • {b.type}
+                      </text>
 
                       {/* Building Name */}
                       <text
-                        x={b.coordinates.x}
-                        y={b.coordinates.y - 0.2}
-                        fontSize="1.9"
-                        textAnchor="middle"
-                        fill={isSelected ? "#1D4ED8" : "#334155"}
-                        fontWeight="bold"
-                        className="pointer-events-none"
+                        x="12"
+                        y="36"
+                        fontSize="12"
+                        fill={isSelected ? "#1E40AF" : isCritical ? "#991B1B" : "#0F172A"}
+                        fontWeight="700"
+                        fontFamily="sans-serif"
                       >
                         {b.name}
                       </text>
 
-                      {/* Occupancy Indicator */}
+                      {/* Occupancy Indicator Bar */}
+                      <rect
+                        x="12"
+                        y={layout.height - 20}
+                        width={layout.width - 24}
+                        height="5"
+                        rx="2.5"
+                        fill="#E2E8F0"
+                      />
+                      <rect
+                        x="12"
+                        y={layout.height - 20}
+                        width={Math.min(
+                          (layout.width - 24) * ((b.occupancy || 0) / (b.capacity || 100)),
+                          layout.width - 24
+                        )}
+                        height="5"
+                        rx="2.5"
+                        fill={isCritical ? "#DC2626" : isSelected ? "#2563EB" : "#10B981"}
+                      />
                       <text
-                        x={b.coordinates.x}
-                        y={b.coordinates.y + 2.2}
-                        fontSize="1.2"
-                        textAnchor="middle"
+                        x="12"
+                        y={layout.height - 25}
+                        fontSize="8.5"
                         fill="#64748B"
-                        className="pointer-events-none"
+                        fontWeight="600"
+                        fontFamily="sans-serif"
                       >
-                        {b.occupancy} occ
+                        {b.occupancy} / {b.capacity} Occupants
                       </text>
 
-                      {/* Hazard Beacon */}
+                      {/* Hazard Beacon Ping */}
                       {hasIncident && (
-                        <g
-                          transform={`translate(${b.coordinates.x + b.width / 2 - 1.2}, ${
-                            b.coordinates.y - b.height / 2 + 1.2
-                          })`}
-                        >
-                          <circle
-                            cx="0"
-                            cy="0"
-                            r="1.8"
-                            fill={isCritical ? "#DC2626" : "#F97316"}
-                            className="animate-ping opacity-40"
-                          />
-                          <circle
-                            cx="0"
-                            cy="0"
-                            r="1.4"
-                            fill={isCritical ? "#DC2626" : "#F97316"}
-                            stroke="#FFFFFF"
-                            strokeWidth="0.4"
-                          />
-                          <text
-                            x="0"
-                            y="0.4"
-                            fontSize="1.2"
-                            textAnchor="middle"
-                            fill="white"
-                            fontWeight="bold"
-                          >
+                        <g transform={`translate(${layout.width - 24}, 8)`}>
+                          <circle cx="8" cy="8" r="9" fill={isCritical ? "#DC2626" : "#F97316"} className="animate-ping opacity-60" />
+                          <circle cx="8" cy="8" r="9" fill={isCritical ? "#DC2626" : "#F97316"} />
+                          <text x="8" y="12" textAnchor="middle" fill="#FFFFFF" fontSize="10" fontWeight="bold">
                             !
                           </text>
                         </g>
