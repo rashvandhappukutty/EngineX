@@ -78,3 +78,88 @@
 .animate-soft-pulse {
   animation: soft-pulse 2s ease-in-out infinite;
 }
+
+/* Satellite Aerial Map Marker Styles */
+.aerial-building-marker {
+  background: rgba(10, 22, 32, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #F8FAFC;
+  border-radius: 7px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 255, 255, 0.2);
+  padding: 4px 10px;
+  white-space: nowrap;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.aerial-building-marker:hover,
+.aerial-building-marker.selected {
+  background: rgba(14, 28, 42, 0.96);
+  border-color: #38BDF8;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.5), 0 4px 18px rgba(0, 0, 0, 0.7);
+  transform: translateY(-2px) scale(1.03);
+}
+
+.aerial-building-marker .status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: #10B981;
+}
+
+.aerial-building-marker .occupancy-tag {
+  color: #94A3B8;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+/* Green Square Assembly Point Pins (A & B) */
+.aerial-assembly-pin {
+  background: #10B981;
+  color: #FFFFFF;
+  width: 26px !important;
+  height: 26px !important;
+  border: 2px solid #FFFFFF;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4), 0 0 8px rgba(16, 185, 129, 0.6);
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.aerial-assembly-pin:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.9);
+}
+
+/* Leaflet Container Aerial Customization */
+.aerial-map-canvas .leaflet-container {
+  background: #090E1B !important;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.dark-tooltip {
+  background: rgba(15, 23, 42, 0.95) !important;
+  color: #F8FAFC !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5) !important;
+  padding: 6px 10px !important;
+  font-size: 11px !important;
+}
+
+.dark-tooltip::before {
+  border-top-color: rgba(15, 23, 42, 0.95) !important;
+}

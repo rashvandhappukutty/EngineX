@@ -19,29 +19,14 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon } from "react-leaflet";
-import L from "leaflet";
 import { CAMPUS_NODE_LAYOUT } from "../store/demoState";
-
-// Create custom SVG Leaflet pin icons
-const createCustomPin = (color: string, label: string) => {
-  return L.divIcon({
-    className: "custom-leaflet-marker",
-    html: `
-      <div style="background-color: ${color}; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.3); border: 1.5px solid white; display: flex; align-items: center; gap: 4px; white-space: nowrap;">
-        <span>${label}</span>
-      </div>
-    `,
-    iconSize: [80, 28],
-    iconAnchor: [40, 14],
-  });
-};
+import AerialCampusMap from "../components/map/AerialCampusMap";
 
 export default function CampusMap() {
   const { buildings, incidents, assemblyPoints, campusEdges, selectedIncidentId, setSelectedIncidentId } = useDemo();
 
-  const [viewMode, setViewMode] = useState<"gis" | "schematic">("schematic");
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>("B1");
+  const [viewMode, setViewMode] = useState<"aerial" | "schematic">("aerial");
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>("B3");
 
   // Layer toggles
   const [showIncidents, setShowIncidents] = useState(true);
@@ -91,8 +76,19 @@ export default function CampusMap() {
 
         {/* View Mode & Layer Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* View Switcher: Schematic Blueprint vs GIS Satellite */}
+          {/* View Switcher: Satellite Aerial (Photo) vs Schematic Blueprint */}
           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 gap-1">
+            <button
+              onClick={() => setViewMode("aerial")}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 ${
+                viewMode === "aerial"
+                  ? "bg-white text-brand-700 shadow-xs border border-brand-200"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <MapIcon size={13} />
+              <span>Satellite Aerial</span>
+            </button>
             <button
               onClick={() => setViewMode("schematic")}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 ${
@@ -103,17 +99,6 @@ export default function CampusMap() {
             >
               <LayoutGrid size={13} />
               <span>Schematic Blueprint</span>
-            </button>
-            <button
-              onClick={() => setViewMode("gis")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 ${
-                viewMode === "gis"
-                  ? "bg-white text-brand-700 shadow-xs border border-brand-200"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <MapIcon size={13} />
-              <span>Satellite GIS</span>
             </button>
           </div>
 
@@ -128,7 +113,7 @@ export default function CampusMap() {
               }`}
             >
               <Flame size={12} className={showIncidents ? "text-critical" : "text-slate-400"} />
-              <span>Hazards</span>
+              <span>Hazards ({activeIncidents.length})</span>
             </button>
             <button
               onClick={() => setShowOccupancy(!showOccupancy)}
@@ -221,118 +206,18 @@ export default function CampusMap() {
             </div>
             <div className="w-px h-3 bg-slate-200" />
             <div className="font-mono text-[10px] text-slate-400">Scale: 1:2500</div>
-          </div>
-
-          {/* VIEW 1: Interactive GIS Satellite Map (Leaflet) */}
-          {viewMode === "gis" && (
+          </div>          {/* VIEW 1: High-Res Aerial Satellite Map (Exact Match to User Reference) */}
+          {viewMode === "aerial" && (
             <div className="w-full h-full relative z-10">
-              <MapContainer
-                center={[11.1085, 77.3411]}
-                zoom={16}
-                scrollWheelZoom={true}
-                className="w-full h-full"
-                style={{ height: "100%", width: "100%" }}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-                  url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                />
-
-                {/* Staff Duty Zones */}
-                {showStaffZones && (
-                  <>
-                    <Polygon
-                      positions={[
-                        [11.1095, 77.3375],
-                        [11.1118, 77.3375],
-                        [11.1118, 77.3410],
-                        [11.1095, 77.3410],
-                      ]}
-                      pathOptions={{
-                        color: "#10B981",
-                        fillColor: "#10B981",
-                        fillOpacity: 0.12,
-                        dashArray: "6,6",
-                      }}
-                    />
-                    <Polygon
-                      positions={[
-                        [11.1065, 77.3415],
-                        [11.1115, 77.3415],
-                        [11.1115, 77.3445],
-                        [11.1065, 77.3445],
-                      ]}
-                      pathOptions={{
-                        color: "#3978F6",
-                        fillColor: "#3978F6",
-                        fillOpacity: 0.1,
-                        dashArray: "6,6",
-                      }}
-                    />
-                  </>
-                )}
-
-                {/* Hazard Incident Circles */}
-                {showIncidents &&
-                  activeIncidents.map((inc) => {
-                    const b = buildings.find((bld) => bld.id === inc.buildingId);
-                    const lat = b?.lat || 11.1085;
-                    const lng = b?.lng || 77.3411;
-
-                    return (
-                      <Circle
-                        key={`circle-${inc.id}`}
-                        center={[lat, lng]}
-                        radius={inc.severity === "critical" ? 75 : 45}
-                        pathOptions={{
-                          color: "#DC2626",
-                          fillColor: "#DC2626",
-                          fillOpacity: 0.2,
-                          dashArray: "4,4",
-                        }}
-                      />
-                    );
-                  })}
-
-                {/* Building Markers */}
-                {buildings.map((b) => {
-                  const bIncidents = incidents.filter(
-                    (i) => i.buildingId === b.id && !["resolved", "closed"].includes(i.status)
-                  );
-                  const isCritical = bIncidents.some((i) => i.severity === "critical");
-                  const pinColor = isCritical ? "#DC2626" : b.status === "evacuating" ? "#EF4444" : "#1D4ED8";
-                  const lat = b.lat || 11.1085;
-                  const lng = b.lng || 77.3411;
-
-                  return (
-                    <Marker
-                      key={`leaflet-${b.id}`}
-                      position={[lat, lng]}
-                      icon={createCustomPin(pinColor, b.name)}
-                      eventHandlers={{
-                        click: () => {
-                          setSelectedBuildingId(b.id);
-                          if (bIncidents.length > 0) setSelectedIncidentId(bIncidents[0].id);
-                        },
-                      }}
-                    >
-                      <Popup>
-                        <div className="p-1 space-y-1 text-slate-800">
-                          <div className="font-bold text-xs">{b.name}</div>
-                          <div className="text-[11px] text-slate-600">
-                            Occupancy: {b.occupancy} / {b.capacity}
-                          </div>
-                          {bIncidents.length > 0 && (
-                            <div className="text-[11px] font-bold text-red-600">
-                              Active Hazards: {bIncidents.length}
-                            </div>
-                          )}
-                        </div>
-                      </Popup>
-                    </Marker>
-                  );
-                })}
-              </MapContainer>
+              <AerialCampusMap
+                selectedBuildingId={selectedBuildingId}
+                onSelectBuilding={(id) => setSelectedBuildingId(id)}
+                showHazards={showIncidents}
+                showOccupancy={showOccupancy}
+                showAssembly={showAssembly}
+                showZones={showStaffZones}
+                showRoutes={true}
+              />
             </div>
           )}
 
