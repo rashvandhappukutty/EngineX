@@ -1,14 +1,18 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useDemo } from "../store/demoState";
 import {
-  useDemo,
-  type IncidentStatus,
-  type Severity,
-} from "../store/demoState";
-import { Link } from "react-router-dom";
-import { Search, AlertCircle, MapPin, Clock, ChevronRight } from "lucide-react";
+  Search,
+  ChevronRight,
+  Filter,
+  Plus,
+} from "lucide-react";
+import { SeverityBadge, StatusBadge } from "../components/common/Badge";
 
 export default function Incidents() {
-  const { incidents, buildings } = useDemo();
+  const { incidents, buildings, setSelectedIncidentId } = useDemo();
+  const navigate = useNavigate();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<string>("all");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
@@ -16,16 +20,17 @@ export default function Incidents() {
   const filteredIncidents = incidents.filter((incident) => {
     const matchesSearch =
       incident.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      incident.id.toLowerCase().includes(searchTerm.toLowerCase());
+      incident.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      incident.locationDetails
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      incident.type.toLowerCase().includes(searchTerm.toLowerCase());
 
-    let matchesTab = true;
-    if (activeTab === "new") matchesTab = incident.status === "reported";
-    if (activeTab === "acknowledged")
-      matchesTab = incident.status === "acknowledged";
-    if (activeTab === "in_progress")
-      matchesTab = incident.status === "in_progress";
-    if (activeTab === "resolved")
-      matchesTab = ["resolved", "closed"].includes(incident.status);
+    const isResolved = ["resolved", "closed"].includes(incident.status);
+    const matchesTab =
+      activeTab === "all" ||
+      (activeTab === "active" && !isResolved) ||
+      (activeTab === "resolved" && isResolved);
 
     const matchesSeverity =
       severityFilter === "all" || incident.severity === severityFilter;
@@ -33,199 +38,170 @@ export default function Incidents() {
     return matchesSearch && matchesTab && matchesSeverity;
   });
 
-  const getSeverityColors = (severity: Severity) => {
-    switch (severity) {
-      case "critical":
-        return "bg-red-100 text-red-800 border-red-200";
-      case "high":
-        return "bg-orange-100 text-orange-800 border-orange-200";
-      case "medium":
-        return "bg-amber-100 text-amber-800 border-amber-200";
-      case "low":
-        return "bg-green-100 text-green-800 border-green-200";
-      default:
-        return "bg-slate-100 text-slate-800 border-slate-200";
-    }
-  };
-
-  const getStatusLabel = (status: IncidentStatus) => {
-    return status
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-  };
+  const activeCount = incidents.filter(
+    (i) => !["resolved", "closed"].includes(i.status)
+  ).length;
 
   return (
-    <div className="flex flex-col h-full space-y-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-end">
+    <div className="space-y-6 max-w-7xl mx-auto pb-10">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Incidents
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-700 border border-red-200">
+              Crisis Triage
+            </span>
+            <span className="text-xs text-slate-500">Incident Management Queue</span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 mt-1">
+            Campus Incident Queue
           </h1>
-          <p className="text-slate-500 mt-1">
-            Manage and track all campus emergency incidents.
-          </p>
         </div>
-        <Link
-          to="/report-emergency"
-          className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-md font-medium shadow-sm transition-colors"
+
+        <button
+          onClick={() => navigate("/report-emergency")}
+          className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors self-start sm:self-auto"
         >
-          Report Emergency
-        </Link>
+          <Plus size={15} />
+          <span>Report New Incident</span>
+        </button>
       </div>
 
-      <div className="bg-panel border border-border rounded-lg shadow-sm flex flex-col flex-1 overflow-hidden">
-        {/* Toolbar */}
-        <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-4 justify-between bg-slate-50">
-          <div className="flex gap-2">
-            {["all", "new", "acknowledged", "in_progress", "resolved"].map(
-              (tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    activeTab === tab
-                      ? "bg-white text-slate-900 shadow-sm border border-slate-200"
-                      : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  {tab === "all"
-                    ? "All Incidents"
-                    : tab
-                        .replace("_", " ")
-                        .replace(/\\b\\w/g, (l) => l.toUpperCase())}
-                </button>
-              ),
-            )}
+      {/* Main Container */}
+      <div className="light-card overflow-hidden">
+        {/* Toolbar & Filter Tabs */}
+        <div className="p-4 border-b border-[#E5EAF1] bg-white flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Status Tabs */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+            {[
+              { id: "all", label: `All (${incidents.length})` },
+              { id: "active", label: `Active (${activeCount})` },
+              {
+                id: "resolved",
+                label: `Resolved (${incidents.length - activeCount})`,
+              },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  activeTab === tab.id
+                    ? "bg-white text-slate-900 shadow-sm font-semibold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          <div className="flex gap-3">
-            <div className="relative">
+          {/* Search & Severity Filter */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-64">
               <Search
+                size={14}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                size={16}
               />
               <input
                 type="text"
-                placeholder="Search ID or Title..."
-                className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by ID, title, or room..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
               />
             </div>
 
-            <select
-              className="px-3 py-1.5 text-sm border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary"
-              value={severityFilter}
-              onChange={(e) => setSeverityFilter(e.target.value)}
-            >
-              <option value="all">All Severities</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
+            <div className="flex items-center gap-1.5 text-xs">
+              <Filter size={14} className="text-slate-400" />
+              <select
+                value={severityFilter}
+                onChange={(e) => setSeverityFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-blue-500"
+              >
+                <option value="all">All Severities</option>
+                <option value="critical">Critical Only</option>
+                <option value="high">High Only</option>
+                <option value="medium">Medium Only</option>
+                <option value="low">Low Only</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 border-b border-border z-10">
+        {/* Table View */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50 border-b border-[#E5EAF1] text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-3 font-semibold">Incident</th>
-                <th className="px-6 py-3 font-semibold">Severity & Status</th>
-                <th className="px-6 py-3 font-semibold">Location</th>
-                <th className="px-6 py-3 font-semibold">Reported</th>
-                <th className="px-6 py-3 font-semibold text-right">Action</th>
+                <th className="px-5 py-3">Incident ID</th>
+                <th className="px-5 py-3">Title & Classification</th>
+                <th className="px-5 py-3">Location</th>
+                <th className="px-5 py-3">Reported Time</th>
+                <th className="px-5 py-3 text-center">Severity</th>
+                <th className="px-5 py-3 text-center">Status</th>
+                <th className="px-5 py-3 text-right">Action</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-[#E5EAF1]">
               {filteredIncidents.length > 0 ? (
                 filteredIncidents.map((incident) => {
-                  const building = buildings.find(
-                    (b) => b.id === incident.buildingId,
-                  );
+                  const b = buildings.find((x) => x.id === incident.buildingId);
                   return (
                     <tr
                       key={incident.id}
-                      className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                      onClick={() => {
+                        setSelectedIncidentId(incident.id);
+                        navigate(`/incidents/${incident.id}`);
+                      }}
+                      className="hover:bg-slate-50/80 cursor-pointer transition-colors"
                     >
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-900">
-                          {incident.title}
-                        </div>
-                        <div className="text-slate-500 text-xs mt-1 flex items-center gap-1">
-                          <span className="font-mono">{incident.id}</span>
-                          <span>•</span>
-                          <span>{incident.type}</span>
+                      <td className="px-5 py-3.5 font-mono font-bold text-slate-800">
+                        {incident.id}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="font-bold text-slate-900">{incident.title}</div>
+                        <div className="text-[11px] text-slate-500 capitalize">
+                          {incident.type}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col items-start gap-2">
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getSeverityColors(incident.severity)}`}
-                          >
-                            {incident.severity.toUpperCase()}
-                          </span>
-                          <span className="text-xs text-slate-600 font-medium">
-                            {getStatusLabel(incident.status)}
-                          </span>
+                      <td className="px-5 py-3.5 text-slate-700">
+                        <div className="font-medium">{b?.name || "Campus Ground"}</div>
+                        <div className="text-[11px] text-slate-400">
+                          {incident.locationDetails}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-start gap-2">
-                          <MapPin size={16} className="text-slate-400 mt-0.5" />
-                          <div>
-                            <div className="font-medium text-slate-800">
-                              {building?.name || "Unknown Location"}
-                            </div>
-                            <div className="text-slate-500 text-xs">
-                              {incident.locationDetails}
-                            </div>
-                          </div>
-                        </div>
+                      <td className="px-5 py-3.5 text-slate-500 font-mono text-[11px]">
+                        {new Date(incident.reportedTime).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-slate-600">
-                          <Clock size={14} className="text-slate-400" />
-                          <span>
-                            {new Date(incident.reportedTime).toLocaleTimeString(
-                              [],
-                              { hour: "2-digit", minute: "2-digit" },
-                            )}
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-500 mt-1">
-                          {new Date(incident.reportedTime).toLocaleDateString()}
-                        </div>
+                      <td className="px-5 py-3.5 text-center">
+                        <SeverityBadge severity={incident.severity} size="sm" />
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <Link
-                          to={`/incidents/${incident.id}`}
-                          className="inline-flex items-center justify-center p-2 text-slate-400 hover:text-primary hover:bg-blue-50 rounded-full transition-colors"
+                      <td className="px-5 py-3.5 text-center">
+                        <StatusBadge status={incident.status} />
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedIncidentId(incident.id);
+                            navigate(`/incidents/${incident.id}`);
+                          }}
+                          className="text-xs font-semibold text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
                         >
-                          <ChevronRight size={20} />
-                        </Link>
+                          <span>Dossier</span>
+                          <ChevronRight size={13} />
+                        </button>
                       </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-6 py-12 text-center text-slate-500"
-                  >
-                    <div className="flex flex-col items-center justify-center">
-                      <AlertCircle size={40} className="text-slate-300 mb-3" />
-                      <p className="text-base font-medium text-slate-900">
-                        No incidents found
-                      </p>
-                      <p className="text-sm">
-                        Try adjusting your search or filters.
-                      </p>
-                    </div>
+                  <td colSpan={7} className="text-center py-12 text-slate-400 text-xs italic">
+                    No incidents match the selected filtering criteria.
                   </td>
                 </tr>
               )}

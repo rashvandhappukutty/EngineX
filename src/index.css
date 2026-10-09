@@ -4,24 +4,77 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    color-scheme: light;
   }
   body {
-    background-color: #F3F4F6; /* Modern elegant background */
-    color: #111827; /* Rich dark gray text */
-    @apply antialiased font-sans;
+    background-color: #F8FAFC;
+    color: #172033;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    @apply antialiased;
+  }
+
+  /* Refined Light Scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #F1F5F9;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
   }
 }
 
-/* Glassmorphism utility */
-.glass-panel {
-  background-color: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+/* Linear-style Crisp Light Card Panels */
+.light-card {
+  background: #FFFFFF;
+  border: 1px solid #E5EAF1;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
 }
 
+.light-card-hover {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.light-card-hover:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+}
+
+/* Contextual AI Intelligence Card */
+.ai-card {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAF5FF 100%);
+  border: 1px solid #E0E7FF;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px -2px rgba(99, 102, 241, 0.08);
+}
+
+.ai-card-subtle {
+  background: #F5F3FF;
+  border: 1px solid #DDD6FE;
+  border-radius: 10px;
+}
+
+/* Subtle Spatial Campus Grid Pattern */
 .pattern-grid {
-  background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
-  background-size: 20px 20px;
+  background-image: 
+    linear-gradient(to right, rgba(226, 232, 240, 0.6) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Pulse animation for active incidents */
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.08); }
+}
+
+.animate-soft-pulse {
+  animation: soft-pulse 2s ease-in-out infinite;
 }

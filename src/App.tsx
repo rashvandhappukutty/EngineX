@@ -4,6 +4,7 @@ import Layout from "./components/layout/Shell";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import Incidents from "./pages/Incidents";
+import CommandCenter from "./pages/CommandCenter";
 import IncidentDetails from "./pages/Incidents/IncidentDetails";
 import CampusMap from "./pages/CampusMap";
 import Dispatch from "./pages/Dispatch";
@@ -26,18 +27,22 @@ function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/command-center" element={<CommandCenter />} />
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/incidents/:id" element={<IncidentDetails />} />
             <Route path="/recommendations" element={<Recommendations />} />
             <Route path="/campus-map" element={<CampusMap />} />
+            <Route path="/map" element={<Navigate to="/campus-map" replace />} />
             <Route path="/dispatch" element={<Dispatch />} />
             <Route path="/evacuation" element={<Evacuation />} />
             <Route path="/resources" element={<Resources />} />
             <Route path="/alerts" element={<Alerts />} />
+            <Route path="/timeline" element={<Navigate to="/alerts" replace />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/users" element={<Users />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/report-emergency" element={<ReportEmergency />} />
+            <Route path="/report" element={<Navigate to="/report-emergency" replace />} />
 
             <Route
               path="*"

@@ -1,13 +1,19 @@
 import { useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useDemo } from "../store/demoState";
 import {
-  ShieldAlert,
-  Route,
-  ChevronRight,
-  XCircle,
+  Route as RouteIcon,
+  AlertTriangle,
+  Compass,
+  CheckCircle2,
+  MapPin,
+  Lock,
+  Unlock,
+  Radio,
+  Building as BuildingIcon
 } from "lucide-react";
 
-// Simple Dijkstra implementation
+// Dijkstra implementation for evacuation routing
 function calculatePath(
   startId: string,
   endId: string,
@@ -62,7 +68,6 @@ function calculatePath(
       const v = e.source === u ? e.target : e.source;
       if (!queue.has(v)) return;
 
-      // If avoiding hazards, strictly prevent entering a hazardous node unless it's the start/end
       if (hazardousNodes.has(v) && v !== startId && v !== endId) {
         return;
       }
@@ -88,469 +93,430 @@ function calculatePath(
 }
 
 export default function Evacuation() {
-  const { buildings, assemblyPoints, campusEdges, toggleEdgeBlock, incidents } =
-    useDemo();
+  const [searchParams] = useSearchParams();
+  const initialBuilding = searchParams.get("building");
 
-  const allNodes = [...buildings, ...assemblyPoints];
+  const {
+    buildings,
+    assemblyPoints,
+    campusEdges,
+    toggleEdgeBlock,
+    incidents,
+    addAuditLog
+  } = useDemo();
+
+  const allNodes = useMemo(() => [...buildings, ...assemblyPoints], [buildings, assemblyPoints]);
 
   const [startNodeId, setStartNodeId] = useState<string>(
-    buildings[0]?.id || "",
+    initialBuilding || buildings[0]?.id || ""
   );
   const [endNodeId, setEndNodeId] = useState<string>(
-    assemblyPoints[0]?.id || "",
+    assemblyPoints[0]?.id || ""
   );
   const [avoidHazards, setAvoidHazards] = useState(true);
+  const [isBroadcasted, setIsBroadcasted] = useState(false);
 
-  const activeIncidents = incidents.filter(
-    (i) => !["resolved", "closed"].includes(i.status),
-  );
-
-  const routeResult = useMemo(() => {
-    if (!startNodeId || !endNodeId) return null;
+  // Compute primary shortest route
+  const primaryRoute = useMemo(() => {
     return calculatePath(
       startNodeId,
       endNodeId,
       campusEdges,
       allNodes,
       avoidHazards,
-      activeIncidents,
+      incidents,
     );
-  }, [
-    startNodeId,
-    endNodeId,
-    campusEdges,
-    allNodes,
-    avoidHazards,
-    activeIncidents,
-  ]);
+  }, [startNodeId, endNodeId, campusEdges, allNodes, avoidHazards, incidents]);
 
-  const alternativeResult = useMemo(() => {
-    if (!startNodeId || !endNodeId || !routeResult) return null;
+  const startNode = allNodes.find((n) => n.id === startNodeId);
+  const endNode = allNodes.find((n) => n.id === endNodeId);
 
-    // Calculate alternative by temporarily blocking the first edge of the primary route
-    if (routeResult.path.length > 1) {
-      const u = routeResult.path[0];
-      const v = routeResult.path[1];
-      const tempEdges = campusEdges.filter((e) => {
-        if (
-          (e.source === u && e.target === v) ||
-          (e.source === v && e.target === u)
-        )
-          return false;
-        return true;
-      });
-      const alt = calculatePath(
-        startNodeId,
-        endNodeId,
-        tempEdges,
-        allNodes,
-        avoidHazards,
-        activeIncidents,
-      );
-      // Only return if it actually found a different path
-      if (alt && alt.path.join(",") !== routeResult.path.join(",")) return alt;
-    }
-    return null;
-  }, [
-    startNodeId,
-    endNodeId,
-    campusEdges,
-    allNodes,
-    avoidHazards,
-    routeResult,
-    activeIncidents,
-  ]);
+  // Estimated walk time (assume 80 meters/minute pace for emergency crowds)
+  const estTimeMinutes = primaryRoute
+    ? Math.max(1, Math.round(primaryRoute.distance / 75))
+    : 0;
 
-  const getPathEdges = (pathArray: string[]) => {
-    const edgesInPath = new Set<string>();
-    for (let i = 0; i < pathArray.length - 1; i++) {
-      const u = pathArray[i];
-      const v = pathArray[i + 1];
-      const edge = campusEdges.find(
-        (e) =>
-          (e.source === u && e.target === v) ||
-          (e.source === v && e.target === u),
-      );
-      if (edge) edgesInPath.add(edge.id);
-    }
-    return edgesInPath;
+  const handleBroadcastCorridor = () => {
+    setIsBroadcasted(true);
+    addAuditLog({
+      action: "evacuation_corridor_authorized",
+      details: `Authorized evacuation corridor from ${startNode?.name} to ${endNode?.name} (${primaryRoute?.distance}m, ${estTimeMinutes} min)`,
+    });
+    setTimeout(() => setIsBroadcasted(false), 4000);
   };
 
-  const primaryEdges = routeResult
-    ? getPathEdges(routeResult.path)
-    : new Set<string>();
-  const altEdges = alternativeResult
-    ? getPathEdges(alternativeResult.path)
-    : new Set<string>();
-
   return (
-    <div className="flex flex-col h-full max-w-7xl mx-auto space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="flex flex-col h-full max-w-7xl mx-auto space-y-6 pb-12">
+      {/* Header */}
+      <div className="light-card p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Evacuation & Routing
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-0.5 rounded-md border border-brand-200 flex items-center gap-1.5">
+              <Compass size={12} className="text-brand-600" />
+              Dynamic Spatial Routing
+            </span>
+            <span className="text-xs text-slate-500 font-medium">Dijkstra Corridor & Graph Solver</span>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Campus Evacuation Corridor Planner
           </h1>
-          <p className="text-slate-500 mt-1">
-            Plan safe evacuation paths and manage dynamically blocked passages.
+          <p className="text-xs text-slate-600 mt-1">
+            Computes accessible, obstacle-free evacuation corridors around verified hazard zones and structural blockages.
           </p>
+        </div>
+
+        {primaryRoute && (
+          <button
+            onClick={handleBroadcastCorridor}
+            className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg shadow-xs transition"
+          >
+            <Radio size={14} className={isBroadcasted ? "animate-pulse" : ""} />
+            <span>{isBroadcasted ? "Broadcast Dispatched!" : "Authorize Corridor Broadcast"}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Corridor Controls & Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Origin Selector */}
+        <div className="light-card p-4 space-y-1.5">
+          <label className="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1.5">
+            <BuildingIcon size={12} className="text-slate-400" />
+            <span>Evacuation Origin</span>
+          </label>
+          <select
+            value={startNodeId}
+            onChange={(e) => setStartNodeId(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-brand-400"
+          >
+            {buildings.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name} ({b.code || b.id})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Destination Assembly Point */}
+        <div className="light-card p-4 space-y-1.5">
+          <label className="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1.5">
+            <MapPin size={12} className="text-emerald-600" />
+            <span>Target Assembly Point</span>
+          </label>
+          <select
+            value={endNodeId}
+            onChange={(e) => setEndNodeId(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-400"
+          >
+            {assemblyPoints.map((ap) => (
+              <option key={ap.id} value={ap.id}>
+                {ap.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Dynamic Hazard Check */}
+        <div className="light-card p-4 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] uppercase font-bold text-slate-500">Hazard Avoidance</div>
+            <div className="text-xs font-bold text-slate-800 mt-0.5">
+              {avoidHazards ? "Active (Safe Corridors)" : "Bypass (Direct Path)"}
+            </div>
+          </div>
+          <button
+            onClick={() => setAvoidHazards(!avoidHazards)}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${
+              avoidHazards
+                ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                : "bg-slate-100 text-slate-600 border-slate-200"
+            }`}
+          >
+            {avoidHazards ? "Enabled" : "Disabled"}
+          </button>
+        </div>
+
+        {/* Route Stats Card */}
+        <div className="light-card p-4 bg-brand-50/40 border-brand-200 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] uppercase font-bold text-brand-700">Calculated Transit</div>
+            <div className="text-base font-black text-brand-900 mt-0.5 flex items-center gap-2">
+              <span>{primaryRoute ? `${primaryRoute.distance} m` : "Blocked"}</span>
+              {primaryRoute && <span className="text-xs font-semibold text-brand-600">~{estTimeMinutes} min</span>}
+            </div>
+          </div>
+          <div className="w-9 h-9 rounded-lg bg-brand-600 text-white flex items-center justify-center">
+            <RouteIcon size={18} />
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-[600px]">
-        {/* Left Panel: Route Controls */}
-        <div className="w-full lg:w-1/3 flex flex-col gap-6">
-          <div className="bg-panel border border-border rounded-lg shadow-sm p-5">
-            <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <Route size={18} /> Routing Setup
-            </h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-semibold text-slate-700 block mb-1">
-                  Starting Location
-                </label>
-                <select
-                  value={startNodeId}
-                  onChange={(e) => setStartNodeId(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-md bg-white text-sm"
-                >
-                  <optgroup label="Buildings">
-                    {buildings.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-semibold text-slate-700 block mb-1">
-                  Destination
-                </label>
-                <select
-                  value={endNodeId}
-                  onChange={(e) => setEndNodeId(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-md bg-white text-sm"
-                >
-                  <optgroup label="Assembly Points">
-                    {assemblyPoints.map((ap) => (
-                      <option key={ap.id} value={ap.id}>
-                        {ap.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Buildings">
-                    {buildings.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="hazards"
-                  checked={avoidHazards}
-                  onChange={(e) => setAvoidHazards(e.target.checked)}
-                  className="rounded text-primary focus:ring-primary"
-                />
-                <label
-                  htmlFor="hazards"
-                  className="text-sm font-medium text-slate-700"
-                >
-                  Strictly avoid hazardous buildings
-                </label>
-              </div>
+      {/* Main Graph Visualization & Corridor Turn-by-Turn */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left: Interactive Campus Graph Canvas */}
+        <div className="lg:col-span-8 light-card p-4 space-y-3 flex flex-col">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span>Campus Walkway Graph & Corridor Geometry</span>
             </div>
+            <span className="text-[11px] text-slate-500">Click any edge line to toggle blockage</span>
           </div>
 
-          {/* Route Results */}
-          <div className="bg-panel border border-border rounded-lg shadow-sm flex-1 flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-border bg-slate-50">
-              <h2 className="font-semibold text-slate-800">Computed Routes</h2>
-            </div>
-            <div className="p-4 flex-1 overflow-y-auto space-y-4 bg-slate-50">
-              {startNodeId === endNodeId ? (
-                <div className="text-sm text-slate-500 italic p-4 text-center border border-slate-200 rounded-md bg-white">
-                  Origin and destination are the same.
-                </div>
-              ) : !routeResult ? (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700 flex flex-col items-center text-center">
-                  <XCircle size={32} className="mb-2 opacity-80" />
-                  <p className="font-bold mb-1">No Available Route</p>
-                  <p className="text-sm">
-                    All possible paths are blocked or restricted by hazards.
-                    Personnel must shelter in place or wait for rescue.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="border border-green-200 bg-green-50 rounded-lg p-4 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl">
-                      RECOMMENDED
-                    </div>
-                    <div className="flex items-center justify-between mb-3 mt-1">
-                      <h3 className="font-bold text-green-900">
-                        Primary Route
-                      </h3>
-                      <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded-full">
-                        ~{routeResult.distance}m
-                      </span>
-                    </div>
-                    <div className="text-sm text-green-800 mb-3 font-medium">
-                      Estimated Travel Time:{" "}
-                      {Math.ceil(routeResult.distance / 1.4 / 60)} min
-                    </div>
-                    <div className="bg-white rounded border border-green-100 p-2 max-h-32 overflow-y-auto">
-                      {routeResult.path.map((nodeId, idx) => {
-                        const node = allNodes.find((n) => n.id === nodeId);
-                        return (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 text-xs text-slate-700 py-1"
-                          >
-                            {idx > 0 && (
-                              <ChevronRight
-                                size={12}
-                                className="text-slate-300"
-                              />
-                            )}
-                            <span
-                              className={
-                                idx === 0 || idx === routeResult.path.length - 1
-                                  ? "font-bold text-slate-900"
-                                  : ""
-                              }
-                            >
-                              {node?.name}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="mt-3 text-xs text-green-700 flex gap-2 items-start">
-                      <ShieldAlert size={14} className="mt-0.5 flex-shrink-0" />
-                      <span>
-                        {avoidHazards
-                          ? "Avoids known high-severity incident zones."
-                          : "Proceeds regardless of hazards."}
-                      </span>
-                    </div>
-                  </div>
+          <div className="relative w-full h-[520px] bg-slate-50 rounded-xl border border-slate-200 overflow-hidden flex items-center justify-center">
+            <svg viewBox="0 0 900 550" className="w-full h-full select-none">
+              <defs>
+                <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#3978F6" />
+                  <stop offset="100%" stopColor="#2563EB" />
+                </linearGradient>
+              </defs>
 
-                  {alternativeResult && (
-                    <div className="border border-slate-200 bg-white rounded-lg p-4 shadow-sm">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-bold text-slate-700">
-                          Alternative Route
-                        </h3>
-                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
-                          ~{alternativeResult.distance}m
-                        </span>
-                      </div>
-                      <div className="bg-slate-50 rounded border border-slate-100 p-2 max-h-32 overflow-y-auto">
-                        {alternativeResult.path.map((nodeId, idx) => {
-                          const node = allNodes.find((n) => n.id === nodeId);
-                          return (
-                            <div
-                              key={idx}
-                              className="flex items-center gap-2 text-xs text-slate-700 py-1"
-                            >
-                              {idx > 0 && (
-                                <ChevronRight
-                                  size={12}
-                                  className="text-slate-300"
-                                />
-                              )}
-                              <span>{node?.name}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
+              {/* Walkway Edges */}
+              {campusEdges.map((edge, idx) => {
+                const src = allNodes.find((n) => n.id === edge.source);
+                const tgt = allNodes.find((n) => n.id === edge.target);
+                if (!src || !tgt) return null;
 
-              <div className="text-[10px] text-slate-400 text-center uppercase tracking-widest pt-2">
-                Simulated Demonstration Logic
-              </div>
-            </div>
-          </div>
-        </div>
+                const srcX = (src as any).coordinates?.x || 100;
+                const srcY = (src as any).coordinates?.y || 100;
+                const tgtX = (tgt as any).coordinates?.x || 200;
+                const tgtY = (tgt as any).coordinates?.y || 200;
 
-        {/* Right Panel: Map & Graph */}
-        <div className="w-full lg:w-2/3 bg-panel border border-border rounded-lg shadow-sm flex flex-col relative overflow-hidden">
-          <div className="absolute top-4 right-4 z-10 bg-white/90 backdrop-blur border border-slate-200 p-3 rounded-md shadow-sm text-xs">
-            <h4 className="font-bold mb-2">Network Editor</h4>
-            <p className="text-slate-500 mb-2 italic max-w-[200px]">
-              Click any passage line to toggle blocked status.
-            </p>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-4 h-1 bg-slate-300"></div> Passage (Clear)
-            </div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-4 h-1 bg-red-500"></div> Passage (Blocked)
-            </div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-4 h-1 bg-green-500 border border-green-700"></div>{" "}
-              Primary Route
-            </div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-4 h-1 bg-blue-300 border border-blue-500 border-dashed"></div>{" "}
-              Alternative
-            </div>
-          </div>
-
-          <div className="flex-1 w-full h-full relative pattern-grid">
-            <svg
-              viewBox="0 0 100 100"
-              className="w-full h-full overflow-visible p-8"
-            >
-              {/* Edges */}
-              {campusEdges.map((edge) => {
-                const s = allNodes.find((n) => n.id === edge.source);
-                const t = allNodes.find((n) => n.id === edge.target);
-                if (!s || !t) return null;
-
-                // @ts-ignore
-                const sx = s.coordinates ? s.coordinates.x : s.x; // Buildings vs Assembly logic in DemoState
-                // @ts-ignore
-                const sy = s.coordinates ? s.coordinates.y : s.y;
-                // @ts-ignore
-                const tx = t.coordinates ? t.coordinates.x : t.x;
-                // @ts-ignore
-                const ty = t.coordinates ? t.coordinates.y : t.y;
-
-                const isPrimary = primaryEdges.has(edge.id);
-                const isAlt = altEdges.has(edge.id);
+                // Is edge part of computed path?
+                const isPathEdge =
+                  primaryRoute &&
+                  primaryRoute.path.some((nodeId, i) => {
+                    const nextId = primaryRoute.path[i + 1];
+                    return (
+                      (nodeId === edge.source && nextId === edge.target) ||
+                      (nodeId === edge.target && nextId === edge.source)
+                    );
+                  });
 
                 return (
                   <g
-                    key={edge.id}
-                    className="cursor-pointer"
+                    key={`edge-${idx}`}
                     onClick={() => toggleEdgeBlock(edge.id)}
+                    className="cursor-pointer group"
                   >
-                    {/* Hitbox */}
                     <line
-                      x1={sx}
-                      y1={sy}
-                      x2={tx}
-                      y2={ty}
-                      stroke="transparent"
-                      strokeWidth="6"
-                    />
-
-                    <line
-                      x1={sx}
-                      y1={sy}
-                      x2={tx}
-                      y2={ty}
-                      className={`transition-all ${
+                      x1={srcX + 50}
+                      y1={srcY + 30}
+                      x2={tgtX + 50}
+                      y2={tgtY + 30}
+                      stroke={
                         edge.blocked
-                          ? "stroke-red-500 stroke-[1.5] opacity-80"
-                          : isPrimary
-                            ? "stroke-green-500 stroke-[2] opacity-100"
-                            : isAlt
-                              ? "stroke-blue-400 stroke-[1.5] stroke-dashed opacity-80"
-                              : "stroke-slate-300 stroke-[1] hover:stroke-slate-400"
-                      }`}
-                      strokeDasharray={isAlt && !isPrimary ? "2 1" : ""}
+                          ? "#DC2626"
+                          : isPathEdge
+                          ? "#3978F6"
+                          : "#CBD5E1"
+                      }
+                      strokeWidth={isPathEdge ? "6" : edge.blocked ? "3" : "2"}
+                      strokeDasharray={edge.blocked ? "6,4" : isPathEdge ? "none" : "3,3"}
+                      strokeLinecap="round"
+                      className="transition-all duration-200"
                     />
-                    {edge.blocked && (
-                      <circle
-                        cx={(sx + tx) / 2}
-                        cy={(sy + ty) / 2}
-                        r="1.5"
-                        fill="#EF4444"
-                      />
-                    )}
-                    {edge.blocked && (
-                      <text
-                        x={(sx + tx) / 2}
-                        y={(sy + ty) / 2 + 0.5}
-                        fontSize="1.5"
-                        fill="white"
-                        textAnchor="middle"
-                        fontWeight="bold"
-                      >
-                        x
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-
-              {/* Nodes (Assembly Points & Buildings) */}
-              {allNodes.map((node) => {
-                // @ts-ignore
-                const isAP = !!node.name.includes("Assembly");
-                // @ts-ignore
-                const cx = node.coordinates ? node.coordinates.x : node.x;
-                // @ts-ignore
-                const cy = node.coordinates ? node.coordinates.y : node.y;
-
-                const isStart = node.id === startNodeId;
-                const isEnd = node.id === endNodeId;
-
-                const hasActiveIncident = incidents.some(
-                  (i) =>
-                    i.buildingId === node.id &&
-                    (i.severity === "high" || i.severity === "critical") &&
-                    !["resolved", "closed"].includes(i.status),
-                );
-                const isHazardous = avoidHazards && hasActiveIncident;
-
-                return (
-                  <g key={node.id}>
+                    {/* Distance label pill */}
                     <circle
-                      cx={cx}
-                      cy={cy}
-                      r={isStart || isEnd ? 3 : isAP ? 2.5 : 2}
-                      className={`${
-                        isStart
-                          ? "fill-blue-500 stroke-blue-700"
-                          : isEnd
-                            ? "fill-green-500 stroke-green-700"
-                            : isAP
-                              ? "fill-emerald-100 stroke-emerald-500"
-                              : isHazardous
-                                ? "fill-red-500 stroke-red-700 animate-pulse"
-                                : "fill-slate-100 stroke-slate-400"
-                      } stroke-[0.5]`}
+                      cx={(srcX + tgtX) / 2 + 50}
+                      cy={(srcY + tgtY) / 2 + 30}
+                      r="12"
+                      fill={edge.blocked ? "#FEE2E2" : "#FFFFFF"}
+                      stroke={edge.blocked ? "#DC2626" : "#E2E8F0"}
+                      strokeWidth="1"
                     />
-
-                    {isHazardous && (
-                      <text
-                        x={cx}
-                        y={cy + 0.5}
-                        fontSize="1.5"
-                        fill="white"
-                        textAnchor="middle"
-                        fontWeight="bold"
-                      >
-                        !
-                      </text>
-                    )}
-
                     <text
-                      x={cx}
-                      y={cy + (isAP ? 4 : -3)}
-                      fontSize="1.8"
+                      x={(srcX + tgtX) / 2 + 50}
+                      y={(srcY + tgtY) / 2 + 34}
                       textAnchor="middle"
-                      fill="#334155"
-                      fontWeight={isStart || isEnd ? "bold" : "normal"}
+                      fill={edge.blocked ? "#DC2626" : "#64748B"}
+                      fontSize="9"
+                      fontWeight="bold"
                     >
-                      {node.name}
+                      {edge.blocked ? "X" : `${edge.distance}m`}
                     </text>
                   </g>
                 );
               })}
+
+              {/* Graph Nodes */}
+              {allNodes.map((node) => {
+                const isStart = node.id === startNodeId;
+                const isEnd = node.id === endNodeId;
+                const isInPath = primaryRoute?.path.includes(node.id);
+                const isAssembly = node.id.startsWith("AP");
+                const posX = (node as any).coordinates?.x || 100;
+                const posY = (node as any).coordinates?.y || 100;
+
+                return (
+                  <g
+                    key={node.id}
+                    transform={`translate(${posX}, ${posY})`}
+                    onClick={() => {
+                      if (isAssembly) setEndNodeId(node.id);
+                      else setStartNodeId(node.id);
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <rect
+                      x="0"
+                      y="0"
+                      width="100"
+                      height="60"
+                      rx="8"
+                      fill={
+                        isStart
+                          ? "#EFF6FF"
+                          : isEnd
+                          ? "#ECFDF5"
+                          : isInPath
+                          ? "#F8FAFC"
+                          : "#FFFFFF"
+                      }
+                      stroke={
+                        isStart
+                          ? "#3978F6"
+                          : isEnd
+                          ? "#10B981"
+                          : isInPath
+                          ? "#3978F6"
+                          : "#CBD5E1"
+                      }
+                      strokeWidth={isStart || isEnd ? "2.5" : isInPath ? "2" : "1"}
+                      className="transition-all duration-200"
+                    />
+                    <text
+                      x="10"
+                      y="22"
+                      fill={isStart ? "#1D4ED8" : isEnd ? "#047857" : "#0F172A"}
+                      fontSize="11"
+                      fontWeight="bold"
+                      fontFamily="sans-serif"
+                    >
+                      {(node as any).code || node.name}
+                    </text>
+                    <text
+                      x="10"
+                      y="38"
+                      fill="#64748B"
+                      fontSize="9"
+                      fontFamily="sans-serif"
+                    >
+                      {isAssembly ? "Safe Zone" : `${(node as any).currentOccupancy || 0} Occupants`}
+                    </text>
+                    {isStart && (
+                      <circle cx="85" cy="18" r="5" fill="#3978F6" />
+                    )}
+                    {isEnd && (
+                      <circle cx="85" cy="18" r="5" fill="#10B981" />
+                    )}
+                  </g>
+                );
+              })}
             </svg>
+          </div>
+        </div>
+
+        {/* Right: Step-by-Step Guidance & Path Restriction Manager */}
+        <div className="lg:col-span-4 space-y-4">
+          {/* Step-by-step corridor route */}
+          <div className="light-card p-5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Evacuation Corridor Waypoints
+              </h2>
+              <span className="text-[10px] font-mono font-bold bg-brand-50 text-brand-700 px-2 py-0.5 rounded border border-brand-200">
+                {primaryRoute?.path.length || 0} Waypoints
+              </span>
+            </div>
+
+            {primaryRoute ? (
+              <div className="space-y-2">
+                {primaryRoute.path.map((nodeId, idx) => {
+                  const n = allNodes.find((item) => item.id === nodeId);
+                  const isFirst = idx === 0;
+                  const isLast = idx === primaryRoute.path.length - 1;
+
+                  return (
+                    <div
+                      key={nodeId}
+                      className={`p-3 rounded-lg border flex items-center justify-between text-xs ${
+                        isFirst
+                          ? "bg-blue-50/70 border-blue-200 text-blue-900 font-bold"
+                          : isLast
+                          ? "bg-emerald-50/70 border-emerald-200 text-emerald-900 font-bold"
+                          : "bg-slate-50 border-slate-200 text-slate-800"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                            isFirst
+                              ? "bg-blue-600 text-white"
+                              : isLast
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-200 text-slate-700"
+                          }`}
+                        >
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <div>{n?.name || nodeId}</div>
+                          <div className="text-[10px] text-slate-500 font-normal font-mono">
+                            {isFirst ? "Evacuation Origin" : isLast ? "Safe Assembly Target" : "Transit Node"}
+                          </div>
+                        </div>
+                      </div>
+                      {isLast && <CheckCircle2 size={16} className="text-emerald-600" />}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-red-600" />
+                  <span>No Direct Corridor Available</span>
+                </div>
+                <p className="text-[11px] text-red-700">
+                  Walkways between the origin and safe zone are blocked or intersected by active hazard boundaries. Unblock corridors or select another assembly point.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Corridor Obstacle & Restriction Toggles */}
+          <div className="light-card p-5 space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              Campus Walkway Blocks ({campusEdges.filter((e) => e.blocked).length} Restricted)
+            </h3>
+            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+              {campusEdges.map((edge) => (
+                <div
+                  key={edge.id}
+                  className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between text-xs"
+                >
+                  <div className="truncate pr-2">
+                    <span className="font-semibold text-slate-800">
+                      {edge.source} ↔ {edge.target}
+                    </span>
+                    <span className="text-[10px] text-slate-500 ml-1.5">({edge.distance}m)</span>
+                  </div>
+                  <button
+                    onClick={() => toggleEdgeBlock(edge.id)}
+                    className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition ${
+                      edge.blocked
+                        ? "bg-red-100 text-red-700 border border-red-300"
+                        : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                    }`}
+                  >
+                    {edge.blocked ? <Lock size={11} /> : <Unlock size={11} />}
+                    <span>{edge.blocked ? "Blocked" : "Clear"}</span>
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

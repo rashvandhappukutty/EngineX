@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import {
   type AIAnalysisResult,
@@ -20,20 +20,33 @@ export interface TimelineEvent {
   message: string;
 }
 
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  action: string;
+  details: string;
+  incidentId?: string;
+}
+
 export interface Incident {
   id: string;
   title: string;
   type: string;
+  category?: string;
   buildingId?: string;
+  location?: string;
   locationDetails: string;
   description: string;
   severity: Severity;
   status: IncidentStatus;
   reportedTime: string;
+  reportedAt?: string;
   lastUpdate: string;
   reporterName: string;
   reporterContact?: string;
   peopleAffected?: number;
+  occupancy?: number;
+  verificationStatus?: string;
   assignedTeamId?: string;
   notes: string[];
   timeline: TimelineEvent[];
@@ -43,9 +56,14 @@ export interface Incident {
 export interface Building {
   id: string;
   name: string;
+  code?: string;
+  floors?: number;
   status: "safe" | "evacuating" | "locked_down";
   occupancy: number;
+  currentOccupancy?: number;
   capacity: number;
+  maxCapacity?: number;
+  evacuationTime?: string;
   type: string;
   coordinates: { x: number; y: number }; // Percentage 0-100 for SVG positioning
   width: number;
@@ -68,6 +86,10 @@ export interface Responder {
   skills: string[];
   status: DispatchStatus;
   currentIncidentId?: string;
+  incidentId?: string;
+  callsign?: string;
+  location?: string;
+  phone?: string;
   baseLocation: string;
   contactNumber: string;
   lastUpdate: string;
@@ -95,8 +117,10 @@ export interface EvacuationRoute {
 export interface Alert {
   id: string;
   title: string;
+  message?: string;
   severity: Severity;
   time: string;
+  timestamp?: string;
   read: boolean;
   incidentId?: string;
   source: string;
@@ -105,6 +129,7 @@ export interface Alert {
 export interface AssemblyPoint {
   id: string;
   name: string;
+  capacity?: number;
   coordinates: { x: number; y: number };
 }
 
@@ -125,12 +150,15 @@ export interface User {
 
 export interface DemoState {
   currentUser: User | null;
+  selectedIncidentId: string | null;
+  setSelectedIncidentId: (id: string | null) => void;
   incidents: Incident[];
   buildings: Building[];
   responders: Responder[];
   resources: Resource[];
   routes: EvacuationRoute[];
   alerts: Alert[];
+  auditLogs: AuditLog[];
   assemblyPoints: AssemblyPoint[];
   campusEdges: CampusEdge[];
   setCurrentUser: (user: User | null) => void;
@@ -144,6 +172,7 @@ export interface DemoState {
   updateResponder: (id: string, updates: Partial<Responder>) => void;
   updateResource: (id: string, updates: Partial<Resource>) => void;
   addNote: (id: string, note: string) => void;
+  addAuditLog: (log: Omit<AuditLog, "id" | "timestamp">) => void;
   toggleEdgeBlock: (edgeId: string) => void;
   markAlertRead: (id: string) => void;
   markAllAlertsRead: () => void;
@@ -727,12 +756,38 @@ const defaultState: DemoState = {
       source: "Dispatch",
     },
   ],
+  auditLogs: [
+    {
+      id: "LOG-1",
+      timestamp: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
+      action: "incident_reported",
+      details: "Chemical Vapor Leak detected in Science Laboratory (BLD-001). Initial triage initiated.",
+      incidentId: "INC-20261009-001",
+    },
+    {
+      id: "LOG-2",
+      timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+      action: "ai_triage_completed",
+      details: "EngineX AI evaluated incident INC-20261009-001 as Critical priority (Risk score: 92/100).",
+      incidentId: "INC-20261009-001",
+    },
+    {
+      id: "LOG-3",
+      timestamp: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
+      action: "responder_dispatched",
+      details: "Dispatched HazMat Response Squad to Science Laboratory East Wing.",
+      incidentId: "INC-20261009-001",
+    },
+  ],
+  selectedIncidentId: "INC-20261009-001",
+  setSelectedIncidentId: () => {},
   setCurrentUser: () => {},
   addIncident: async () => ({} as Incident),
   updateIncident: () => {},
   updateResponder: () => {},
   updateResource: () => {},
   addNote: () => {},
+  addAuditLog: () => {},
   toggleEdgeBlock: () => {},
   markAlertRead: () => {},
   markAllAlertsRead: () => {},
@@ -744,29 +799,85 @@ const defaultState: DemoState = {
 const DemoContext = createContext<DemoState>(defaultState);
 
 export function DemoProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(
-    defaultState.currentUser,
-  );
-  const [incidents, setIncidents] = useState<Incident[]>(
-    defaultState.incidents,
-  );
-  const [buildings, setBuildings] = useState<Building[]>(
-    defaultState.buildings,
-  );
-  const [responders, setResponders] = useState<Responder[]>(
-    defaultState.responders,
-  );
-  const [resources, setResources] = useState<Resource[]>(
-    defaultState.resources,
-  );
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem("enginex_user");
+      return saved ? JSON.parse(saved) : defaultState.currentUser;
+    } catch {
+      return defaultState.currentUser;
+    }
+  });
+
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("enginex_selected_incident") || "INC-20261009-001";
+    } catch {
+      return "INC-20261009-001";
+    }
+  });
+
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(defaultState.auditLogs);
+
+  const addAuditLog = (log: Omit<AuditLog, "id" | "timestamp">) => {
+    const newLog: AuditLog = {
+      ...log,
+      id: `LOG-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+    };
+    setAuditLogs((prev) => [newLog, ...prev]);
+  };
+
+  const [incidents, setIncidents] = useState<Incident[]>(() => {
+    try {
+      const saved = localStorage.getItem("enginex_incidents");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return defaultState.incidents;
+    } catch {
+      return defaultState.incidents;
+    }
+  });
+
+  const [buildings, setBuildings] = useState<Building[]>(defaultState.buildings);
+  const [responders, setResponders] = useState<Responder[]>(defaultState.responders);
+  const [resources, setResources] = useState<Resource[]>(defaultState.resources);
   const [routes] = useState<EvacuationRoute[]>(defaultState.routes);
   const [alerts, setAlerts] = useState<Alert[]>(defaultState.alerts);
-  const [assemblyPoints] = useState<AssemblyPoint[]>(
-    defaultState.assemblyPoints,
-  );
-  const [campusEdges, setCampusEdges] = useState<CampusEdge[]>(
-    defaultState.campusEdges,
-  );
+  const [assemblyPoints] = useState<AssemblyPoint[]>(defaultState.assemblyPoints);
+  const [campusEdges, setCampusEdges] = useState<CampusEdge[]>(defaultState.campusEdges);
+
+  // Sync to localStorage
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem("enginex_user", JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem("enginex_user");
+      }
+    } catch (e) {
+      console.warn("Storage sync error:", e);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    try {
+      if (selectedIncidentId) {
+        localStorage.setItem("enginex_selected_incident", selectedIncidentId);
+      }
+    } catch (e) {
+      console.warn("Storage sync error:", e);
+    }
+  }, [selectedIncidentId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("enginex_incidents", JSON.stringify(incidents));
+    } catch (e) {
+      console.warn("Storage sync error:", e);
+    }
+  }, [incidents]);
 
   const createAlert = (
     title: string,
@@ -1075,12 +1186,15 @@ export function DemoProvider({ children }: { children: ReactNode }) {
       value={{
         currentUser,
         setCurrentUser,
+        selectedIncidentId,
+        setSelectedIncidentId,
         incidents,
         buildings,
         responders,
         resources,
         routes,
         alerts,
+        auditLogs,
         assemblyPoints,
         campusEdges,
         addIncident,
@@ -1088,6 +1202,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         updateResponder,
         updateResource,
         addNote,
+        addAuditLog,
         toggleEdgeBlock,
         markAlertRead,
         markAllAlertsRead,

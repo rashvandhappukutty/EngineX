@@ -1,30 +1,35 @@
 import { useState } from "react";
 import { useDemo, type Building } from "../store/demoState";
+import { SeverityBadge, StatusBadge } from "../components/common/Badge";
 import {
-  Map as Box,
   ZoomIn,
   ZoomOut,
   Maximize,
-  ShieldAlert,
   X,
-  AlertTriangle,
   Users,
-  Navigation,
+  Flame,
+  CheckCircle2,
+  Shield,
+  MapPin,
+  Compass,
+  AlertTriangle,
+  ArrowRight,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function CampusMap() {
-  const { buildings, incidents } = useDemo();
+  const { buildings, incidents, selectedIncidentId, setSelectedIncidentId } = useDemo();
 
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(
-    null,
-  );
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>("BLD-001");
 
   // Layer toggles
   const [showIncidents, setShowIncidents] = useState(true);
-  const [showOccupancy, setShowOccupancy] = useState(false);
-  const [showResources, setShowResources] = useState(false);
+  const [showOccupancy, setShowOccupancy] = useState(true);
+  const [showAssembly, setShowAssembly] = useState(true);
+  const [showStaffZones, setShowStaffZones] = useState(true);
+  const [showHazardRadius] = useState(true);
 
-  // Simple zoom/pan state (mock for UI)
+  // Zoom
   const [zoom, setZoom] = useState(1);
 
   const selectedBuilding = buildings.find((b) => b.id === selectedBuildingId);
@@ -34,382 +39,566 @@ export default function CampusMap() {
       !["resolved", "closed"].includes(i.status),
   );
 
-  const handleZoomIn = () => setZoom((z) => Math.min(z + 0.2, 2));
-  const handleZoomOut = () => setZoom((z) => Math.max(z - 0.2, 0.5));
+  const activeIncidents = incidents.filter((i) => !["resolved", "closed"].includes(i.status));
+
+  const handleZoomIn = () => setZoom((z) => Math.min(z + 0.2, 2.0));
+  const handleZoomOut = () => setZoom((z) => Math.max(z - 0.2, 0.7));
   const handleResetZoom = () => setZoom(1);
 
   const getOccupancyColor = (occupancy: number, capacity: number) => {
     const ratio = occupancy / capacity;
-    if (ratio > 0.9) return "fill-red-500";
-    if (ratio > 0.7) return "fill-orange-400";
-    if (ratio > 0.4) return "fill-amber-300";
-    return "fill-green-400";
+    if (ratio > 0.85) return "#DC2626";
+    if (ratio > 0.65) return "#F59E0B";
+    if (ratio > 0.4) return "#3978F6";
+    return "#10B981";
   };
 
-  const getBuildingBaseColor = (b: Building) => {
-    if (b.status === "evacuating") return "fill-red-100 stroke-red-500";
-    if (b.status === "locked_down") return "fill-orange-100 stroke-orange-500";
-    return "fill-slate-100 stroke-slate-300 hover:fill-slate-200";
+  const getBuildingFill = (b: Building, isSelected: boolean) => {
+    if (isSelected) return "#EEF2FF";
+    if (b.status === "evacuating") return "#FEF2F2";
+    if (b.status === "locked_down") return "#FFFBEB";
+    return "#FFFFFF";
+  };
+
+  const getBuildingStroke = (b: Building, isSelected: boolean) => {
+    if (isSelected) return "#3978F6";
+    if (b.status === "evacuating") return "#DC2626";
+    if (b.status === "locked_down") return "#F59E0B";
+    return "#CBD5E1";
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] max-w-full -m-6">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-border bg-white flex justify-between items-center z-10 shadow-sm">
+    <div className="flex flex-col h-[calc(100vh-6.5rem)] max-w-full space-y-4">
+      {/* Header Bar */}
+      <div className="light-card p-4 flex flex-wrap justify-between items-center gap-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Campus Map
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-600 bg-brand-50 px-2.5 py-0.5 rounded-md border border-brand-200">
+              GIS Spatial Operations
+            </span>
+            <span className="text-xs text-slate-500 font-medium">Interactive Facility & Hazard Map</span>
+          </div>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-1">
+            Live Campus Map & Facilities
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Simulated spatial view of facilities and active incidents.
-          </p>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-md border border-slate-200">
-          <button
-            onClick={() => setShowIncidents(!showIncidents)}
-            className={`px-3 py-1.5 text-sm font-medium rounded transition-colors flex items-center gap-2 ${showIncidents ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <AlertTriangle
-              size={14}
-              className={showIncidents ? "text-red-500" : ""}
-            />{" "}
-            Incidents
-          </button>
-          <button
-            onClick={() => setShowOccupancy(!showOccupancy)}
-            className={`px-3 py-1.5 text-sm font-medium rounded transition-colors flex items-center gap-2 ${showOccupancy ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <Users size={14} className={showOccupancy ? "text-blue-500" : ""} />{" "}
-            Occupancy
-          </button>
-          <button
-            onClick={() => setShowResources(!showResources)}
-            className={`px-3 py-1.5 text-sm font-medium rounded transition-colors flex items-center gap-2 ${showResources ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <Box size={14} className={showResources ? "text-green-500" : ""} />{" "}
-            Resources
-          </button>
-        </div>
-      </div>
 
-      {/* Main Map Workspace */}
-      <div className="flex-1 flex overflow-hidden relative bg-slate-50">
-        {/* SVG Canvas Area */}
-        <div className="flex-1 relative overflow-hidden flex items-center justify-center pattern-grid">
-          {/* Map Controls */}
-          <div className="absolute top-4 left-4 flex flex-col gap-2 z-10 bg-white p-1 rounded-md shadow-sm border border-slate-200">
+        {/* Layer Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 gap-1">
             <button
-              onClick={handleZoomIn}
-              className="p-2 hover:bg-slate-100 text-slate-600 rounded"
-              title="Zoom In"
+              onClick={() => setShowIncidents(!showIncidents)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                showIncidents
+                  ? "bg-white text-critical shadow-xs border border-critical/30"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
             >
-              <ZoomIn size={18} />
+              <Flame size={13} className={showIncidents ? "text-critical" : "text-slate-400"} />
+              <span>Hazards</span>
             </button>
             <button
-              onClick={handleResetZoom}
-              className="p-2 hover:bg-slate-100 text-slate-600 rounded"
-              title="Reset Zoom"
+              onClick={() => setShowOccupancy(!showOccupancy)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                showOccupancy
+                  ? "bg-white text-brand-600 shadow-xs border border-brand-200"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
             >
-              <Maximize size={18} />
+              <Users size={13} className={showOccupancy ? "text-brand-600" : "text-slate-400"} />
+              <span>Occupancy</span>
+            </button>
+            <button
+              onClick={() => setShowAssembly(!showAssembly)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                showAssembly
+                  ? "bg-white text-emerald-600 shadow-xs border border-emerald-200"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <CheckCircle2 size={13} className={showAssembly ? "text-emerald-600" : "text-slate-400"} />
+              <span>Assembly Points</span>
+            </button>
+            <button
+              onClick={() => setShowStaffZones(!showStaffZones)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                showStaffZones
+                  ? "bg-white text-indigo-600 shadow-xs border border-indigo-200"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Shield size={13} className={showStaffZones ? "text-indigo-600" : "text-slate-400"} />
+              <span>Staff Zones</span>
+            </button>
+          </div>
+
+          <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 gap-1">
+            <button
+              onClick={handleZoomIn}
+              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded transition"
+              title="Zoom In"
+            >
+              <ZoomIn size={15} />
             </button>
             <button
               onClick={handleZoomOut}
-              className="p-2 hover:bg-slate-100 text-slate-600 rounded"
+              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded transition"
               title="Zoom Out"
             >
-              <ZoomOut size={18} />
+              <ZoomOut size={15} />
+            </button>
+            <button
+              onClick={handleResetZoom}
+              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded transition"
+              title="Recenter Map"
+            >
+              <Maximize size={15} />
             </button>
           </div>
+        </div>
+      </div>
 
-          {/* SVG Map */}
-          <div
-            className="relative w-full h-full flex items-center justify-center transition-transform duration-300"
-            style={{ transform: `scale(${zoom})` }}
-          >
-            <svg
-              viewBox="0 0 100 100"
-              className="w-[80%] h-[80%] drop-shadow-sm overflow-visible"
-            >
-              {/* Ground elements / Roads (Mock) */}
-              <path
-                d="M 0 55 C 40 55, 60 45, 100 45"
-                fill="none"
-                stroke="#E2E8F0"
-                strokeWidth="4"
-              />
-              <path
-                d="M 45 0 L 45 100"
-                fill="none"
-                stroke="#E2E8F0"
-                strokeWidth="3"
-              />
-              <circle cx="45" cy="50" r="4" fill="#E2E8F0" />
-
-              {/* Assembly Points */}
-              <circle
-                cx="20"
-                cy="85"
-                r="3"
-                fill="#D1FAE5"
-                stroke="#10B981"
-                strokeWidth="0.5"
-                strokeDasharray="1,1"
-              />
-              <text
-                x="20"
-                y="85"
-                fontSize="1.5"
-                textAnchor="middle"
-                fill="#065F46"
-                dy="0.5"
-              >
-                AP-1
-              </text>
-
-              <circle
-                cx="85"
-                cy="80"
-                r="3"
-                fill="#D1FAE5"
-                stroke="#10B981"
-                strokeWidth="0.5"
-                strokeDasharray="1,1"
-              />
-              <text
-                x="85"
-                y="80"
-                fontSize="1.5"
-                textAnchor="middle"
-                fill="#065F46"
-                dy="0.5"
-              >
-                AP-2
-              </text>
-
-              {/* Buildings */}
-              {buildings.map((b) => {
-                const isActive = selectedBuildingId === b.id;
-                const hasIncident = incidents.some(
-                  (i) =>
-                    i.buildingId === b.id &&
-                    !["resolved", "closed"].includes(i.status),
-                );
-
-                return (
-                  <g
-                    key={b.id}
-                    className="cursor-pointer transition-all"
-                    onClick={() => setSelectedBuildingId(b.id)}
-                  >
-                    <rect
-                      x={b.coordinates.x - b.width / 2}
-                      y={b.coordinates.y - b.height / 2}
-                      width={b.width}
-                      height={b.height}
-                      rx="1"
-                      className={`${getBuildingBaseColor(b)} ${isActive ? "stroke-primary stroke-[1.5]" : "stroke-[0.5]"} transition-colors`}
-                    />
-
-                    {/* Building Name label */}
-                    <text
-                      x={b.coordinates.x}
-                      y={b.coordinates.y + 0.5}
-                      fontSize="2"
-                      textAnchor="middle"
-                      fill="#475569"
-                      fontWeight="bold"
-                      className="pointer-events-none"
-                    >
-                      {b.name}
-                    </text>
-
-                    {/* Occupancy Overlay */}
-                    {showOccupancy && (
-                      <circle
-                        cx={b.coordinates.x + b.width / 2 - 1.5}
-                        cy={b.coordinates.y - b.height / 2 + 1.5}
-                        r="1.2"
-                        className={getOccupancyColor(b.occupancy, b.capacity)}
-                      />
-                    )}
-
-                    {/* Incident Indicator */}
-                    {showIncidents && hasIncident && (
-                      <g
-                        transform={`translate(${b.coordinates.x - b.width / 2 + 1.5}, ${b.coordinates.y - b.height / 2 + 1.5})`}
-                      >
-                        <circle
-                          cx="0"
-                          cy="0"
-                          r="1.5"
-                          fill="#EF4444"
-                          className="animate-pulse"
-                        />
-                        <text
-                          x="0"
-                          y="0.5"
-                          fontSize="1.5"
-                          textAnchor="middle"
-                          fill="white"
-                          fontWeight="bold"
-                        >
-                          !
-                        </text>
-                      </g>
-                    )}
-                  </g>
-                );
-              })}
-            </svg>
+      {/* Main Workspace */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 flex-1 min-h-0">
+        {/* Map Canvas */}
+        <div className="lg:col-span-3 light-card overflow-hidden relative flex flex-col bg-slate-50 border border-slate-200">
+          {/* Map Status Bar */}
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs font-semibold text-slate-800">Sasurie Main Campus GeoGrid</span>
+            <span className="text-[10px] text-slate-500 font-mono">11.1085° N, 77.3411° E</span>
           </div>
 
-          {/* Legend */}
-          <div className="absolute bottom-4 left-4 bg-white p-3 rounded-md shadow-sm border border-slate-200 text-xs">
-            <h4 className="font-bold mb-2 text-slate-800">Map Legend</h4>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-slate-100 border border-slate-300"></div>{" "}
-                Normal Building
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-red-100 border border-red-500"></div>{" "}
-                Evacuating
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>{" "}
-                Active Incident
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full border border-green-500 bg-green-100 border-dashed"></div>{" "}
-                Assembly Point
-              </div>
+          {/* Scale & Legend */}
+          <div className="absolute bottom-3 left-3 z-10 bg-white/95 backdrop-blur-sm p-2.5 rounded-lg border border-slate-200 shadow-xs flex items-center gap-3 text-[11px] text-slate-600">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-400" />
+              <span>Normal</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-amber-100 border border-amber-400" />
+              <span>Caution</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-red-100 border border-red-500" />
+              <span>Evacuating</span>
+            </div>
+            <div className="w-px h-3 bg-slate-200" />
+            <div className="font-mono text-[10px] text-slate-400">Scale: 1:2500</div>
+          </div>
+
+          {/* Interactive SVG Canvas */}
+          <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
+            <div
+              style={{
+                transform: `scale(${zoom})`,
+                transformOrigin: "center center",
+                transition: "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+              }}
+              className="relative w-[900px] h-[600px] bg-white rounded-xl border border-slate-200 shadow-xs pattern-grid"
+            >
+              <svg
+                viewBox="0 0 900 600"
+                className="w-full h-full select-none"
+              >
+                <defs>
+                  <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+                    <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#F1F5F9" strokeWidth="1" />
+                  </pattern>
+                  <radialGradient id="hazardGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#DC2626" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#DC2626" stopOpacity="0.0" />
+                  </radialGradient>
+                </defs>
+
+                <rect width="100%" height="100%" fill="url(#grid)" />
+
+                {/* Campus Perimeter Road & Walkways */}
+                <path
+                  d="M 50 50 L 850 50 L 850 550 L 50 550 Z"
+                  fill="none"
+                  stroke="#E2E8F0"
+                  strokeWidth="8"
+                  strokeDasharray="4,4"
+                />
+                {/* Main Walkway Spine */}
+                <path
+                  d="M 450 60 L 450 540 M 60 300 L 840 300"
+                  fill="none"
+                  stroke="#E2E8F0"
+                  strokeWidth="10"
+                />
+
+                {/* Staff Duty Zones */}
+                {showStaffZones && (
+                  <g className="transition-opacity duration-300">
+                    <rect
+                      x="70"
+                      y="70"
+                      width="350"
+                      height="210"
+                      fill="#10B981"
+                      fillOpacity="0.05"
+                      stroke="#10B981"
+                      strokeWidth="1.5"
+                      strokeDasharray="6,4"
+                      rx="8"
+                    />
+                    <text x="85" y="95" fill="#059669" fontSize="10" fontWeight="700" fontFamily="sans-serif">
+                      ZONE NORTH (Medical & Security Patrol)
+                    </text>
+
+                    <rect
+                      x="470"
+                      y="70"
+                      width="360"
+                      height="460"
+                      fill="#3978F6"
+                      fillOpacity="0.04"
+                      stroke="#3978F6"
+                      strokeWidth="1.5"
+                      strokeDasharray="6,4"
+                      rx="8"
+                    />
+                    <text x="485" y="95" fill="#2563EB" fontSize="10" fontWeight="700" fontFamily="sans-serif">
+                      ZONE EAST (HazMat & Technical Fleet)
+                    </text>
+                  </g>
+                )}
+
+                {/* Hazard Radiuses */}
+                {showHazardRadius && (
+                  <g>
+                    {activeIncidents.map((inc) => {
+                      const b = buildings.find((bld) => bld.id === inc.buildingId);
+                      if (!b) return null;
+                      return (
+                        <g key={`hazard-${inc.id}`}>
+                          <circle
+                            cx={b.coordinates.x + b.width / 2}
+                            cy={b.coordinates.y + b.height / 2}
+                            r={inc.severity === "critical" ? 85 : 55}
+                            fill="url(#hazardGlow)"
+                            stroke="#DC2626"
+                            strokeWidth="1.5"
+                            strokeDasharray="4,3"
+                            className="animate-pulse"
+                          />
+                        </g>
+                      );
+                    })}
+                  </g>
+                )}
+
+                {/* Campus Buildings */}
+                {buildings.map((b) => {
+                  const isSelected = b.id === selectedBuildingId;
+                  const stroke = getBuildingStroke(b, isSelected);
+                  const fill = getBuildingFill(b, isSelected);
+                  const bIncidents = incidents.filter(
+                    (i) => i.buildingId === b.id && !["resolved", "closed"].includes(i.status)
+                  );
+
+                  return (
+                    <g
+                      key={b.id}
+                      onClick={() => {
+                        setSelectedBuildingId(b.id);
+                        if (bIncidents.length > 0) {
+                          setSelectedIncidentId(bIncidents[0].id);
+                        }
+                      }}
+                      className="cursor-pointer transition-transform duration-150 group"
+                    >
+                      {/* Building Footprint */}
+                      <rect
+                        x={b.coordinates.x}
+                        y={b.coordinates.y}
+                        width={b.width}
+                        height={b.height}
+                        rx="8"
+                        fill={fill}
+                        stroke={stroke}
+                        strokeWidth={isSelected ? "3" : "1.5"}
+                        className="transition-all duration-200 shadow-sm"
+                      />
+
+                      {/* Header label */}
+                      <text
+                        x={b.coordinates.x + 12}
+                        y={b.coordinates.y + 24}
+                        fill="#0F172A"
+                        fontSize="13"
+                        fontWeight="700"
+                        fontFamily="sans-serif"
+                      >
+                        {b.name}
+                      </text>
+
+                      {/* Subtitle / Code */}
+                      <text
+                        x={b.coordinates.x + 12}
+                        y={b.coordinates.y + 40}
+                        fill="#64748B"
+                        fontSize="10"
+                        fontWeight="500"
+                        fontFamily="sans-serif"
+                      >
+                        {b.code} • {b.floors} Floors
+                      </text>
+
+                      {/* Occupancy Indicator */}
+                      {showOccupancy && (
+                        <g>
+                          <rect
+                            x={b.coordinates.x + 12}
+                            y={b.coordinates.y + b.height - 24}
+                            width={b.width - 24}
+                            height="6"
+                            rx="3"
+                            fill="#E2E8F0"
+                          />
+                          <rect
+                            x={b.coordinates.x + 12}
+                            y={b.coordinates.y + b.height - 24}
+                            width={Math.min(
+                              (b.width - 24) * ((b.currentOccupancy || b.occupancy || 0) / (b.maxCapacity || b.capacity || 100)),
+                              b.width - 24
+                            )}
+                            height="6"
+                            rx="3"
+                            fill={getOccupancyColor(b.currentOccupancy || b.occupancy || 0, b.maxCapacity || b.capacity || 100)}
+                          />
+                          <text
+                            x={b.coordinates.x + 12}
+                            y={b.coordinates.y + b.height - 30}
+                            fill="#64748B"
+                            fontSize="9"
+                            fontWeight="600"
+                          >
+                            Occupancy: {b.currentOccupancy || b.occupancy || 0} / {b.maxCapacity || b.capacity || 100} ({Math.round(((b.currentOccupancy || b.occupancy || 0) / (b.maxCapacity || b.capacity || 100)) * 100)}%)
+                          </text>
+                        </g>
+                      )}
+
+                      {/* Hazard Pin */}
+                      {showIncidents && bIncidents.length > 0 && (
+                        <g transform={`translate(${b.coordinates.x + b.width - 28}, ${b.coordinates.y + 10})`}>
+                          <circle cx="10" cy="10" r="12" fill="#DC2626" className="animate-ping opacity-75" />
+                          <circle cx="10" cy="10" r="12" fill="#DC2626" />
+                          <text
+                            x="10"
+                            y="14"
+                            textAnchor="middle"
+                            fill="#FFFFFF"
+                            fontSize="11"
+                            fontWeight="bold"
+                          >
+                            !
+                          </text>
+                        </g>
+                      )}
+                    </g>
+                  );
+                })}
+
+                {/* Assembly Points */}
+                {showAssembly && (
+                  <g>
+                    {/* Assembly Point 1 */}
+                    <g transform="translate(180, 520)" className="cursor-pointer">
+                      <circle cx="0" cy="0" r="18" fill="#10B981" fillOpacity="0.15" stroke="#10B981" strokeWidth="2" />
+                      <circle cx="0" cy="0" r="10" fill="#10B981" />
+                      <text x="0" y="4" textAnchor="middle" fill="#FFFFFF" fontSize="9" fontWeight="bold">
+                        AP1
+                      </text>
+                      <text x="0" y="28" textAnchor="middle" fill="#065F46" fontSize="10" fontWeight="700">
+                        West Athletic Field
+                      </text>
+                    </g>
+
+                    {/* Assembly Point 2 */}
+                    <g transform="translate(700, 520)" className="cursor-pointer">
+                      <circle cx="0" cy="0" r="18" fill="#10B981" fillOpacity="0.15" stroke="#10B981" strokeWidth="2" />
+                      <circle cx="0" cy="0" r="10" fill="#10B981" />
+                      <text x="0" y="4" textAnchor="middle" fill="#FFFFFF" fontSize="9" fontWeight="bold">
+                        AP2
+                      </text>
+                      <text x="0" y="28" textAnchor="middle" fill="#065F46" fontSize="10" fontWeight="700">
+                        East Quad Green
+                      </text>
+                    </g>
+
+                    {/* Assembly Point 3 */}
+                    <g transform="translate(450, 40)" className="cursor-pointer">
+                      <circle cx="0" cy="0" r="18" fill="#10B981" fillOpacity="0.15" stroke="#10B981" strokeWidth="2" />
+                      <circle cx="0" cy="0" r="10" fill="#10B981" />
+                      <text x="0" y="4" textAnchor="middle" fill="#FFFFFF" fontSize="9" fontWeight="bold">
+                        AP3
+                      </text>
+                      <text x="0" y="28" textAnchor="middle" fill="#065F46" fontSize="10" fontWeight="700">
+                        North Gate Plaza
+                      </text>
+                    </g>
+                  </g>
+                )}
+              </svg>
             </div>
           </div>
         </div>
 
-        {/* Building Details Side Panel */}
-        {selectedBuilding && (
-          <div className="w-80 bg-white border-l border-border shadow-xl flex flex-col h-full z-20 overflow-y-auto animate-in slide-in-from-right-4">
-            <div className="p-4 border-b border-border flex justify-between items-start bg-slate-50">
-              <div>
-                <h3 className="font-bold text-lg text-slate-900">
-                  {selectedBuilding.name}
-                </h3>
-                <p className="text-sm text-slate-500">
-                  {selectedBuilding.type} Facility
-                </p>
+        {/* Building Inspector Sidebar */}
+        <div className="lg:col-span-1 space-y-4 flex flex-col overflow-y-auto">
+          {selectedBuilding ? (
+            <div className="light-card p-4 space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-mono font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
+                    {selectedBuilding.code}
+                  </span>
+                  <h2 className="text-lg font-bold text-slate-900 mt-1">
+                    {selectedBuilding.name}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setSelectedBuildingId(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded transition"
+                >
+                  <X size={16} />
+                </button>
               </div>
-              <button
-                onClick={() => setSelectedBuildingId(null)}
-                className="text-slate-400 hover:text-slate-700"
-              >
-                <X size={20} />
-              </button>
-            </div>
 
-            <div className="p-4 space-y-6">
-              {/* Status & Occupancy */}
-              <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
-                  Current Status
-                </h4>
-
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className={`px-3 py-1 rounded-full text-sm font-bold border ${
-                      selectedBuilding.status === "safe"
-                        ? "bg-green-100 text-green-700 border-green-200"
-                        : selectedBuilding.status === "evacuating"
-                          ? "bg-red-100 text-red-700 border-red-200"
-                          : "bg-orange-100 text-orange-700 border-orange-200"
-                    }`}
-                  >
-                    {selectedBuilding.status.toUpperCase()}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                  <div className="text-[10px] uppercase font-semibold text-slate-500">Status</div>
+                  <div className="text-xs font-bold text-slate-800 capitalize mt-0.5">
+                    {selectedBuilding.status.replace("_", " ")}
                   </div>
                 </div>
-
-                <div className="bg-slate-50 border border-slate-200 rounded-md p-3">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-slate-600 font-medium">
-                      Estimated Occupancy
-                    </span>
-                    <span className="font-bold">
-                      {selectedBuilding.occupancy} / {selectedBuilding.capacity}
-                    </span>
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                  <div className="text-[10px] uppercase font-semibold text-slate-500">Floors</div>
+                  <div className="text-xs font-bold text-slate-800 mt-0.5">
+                    {selectedBuilding.floors} Levels
                   </div>
-                  <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
-                    <div
-                      className={`h-2 rounded-full ${selectedBuilding.occupancy / selectedBuilding.capacity > 0.8 ? "bg-red-500" : "bg-primary"}`}
-                      style={{
-                        width: `${Math.min((selectedBuilding.occupancy / selectedBuilding.capacity) * 100, 100)}%`,
-                      }}
-                    ></div>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                  <div className="text-[10px] uppercase font-semibold text-slate-500">Occupancy</div>
+                  <div className="text-xs font-bold text-slate-800 mt-0.5">
+                    {selectedBuilding.currentOccupancy} / {selectedBuilding.maxCapacity}
                   </div>
-                  <p className="text-xs text-slate-400 mt-2 text-right">
-                    Updated 2 mins ago
-                  </p>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                  <div className="text-[10px] uppercase font-semibold text-slate-500">Evac Time</div>
+                  <div className="text-xs font-bold text-brand-600 mt-0.5">
+                    {selectedBuilding.evacuationTime}
+                  </div>
                 </div>
               </div>
 
-              {/* Active Incidents */}
+              {/* Active Hazards in this building */}
               <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
-                  Active Incidents
-                  <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full text-xs">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center justify-between">
+                  <span>Active Incident Reports</span>
+                  <span className="text-[11px] font-mono px-1.5 py-0.2 bg-slate-100 rounded text-slate-600">
                     {buildingIncidents.length}
                   </span>
-                </h4>
+                </h3>
 
-                {buildingIncidents.length > 0 ? (
-                  <div className="space-y-3">
+                {buildingIncidents.length === 0 ? (
+                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200/70 text-emerald-800 text-xs flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                    <span>No active incidents reported in this facility.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
                     {buildingIncidents.map((inc) => (
                       <div
                         key={inc.id}
-                        className="border border-red-200 bg-red-50 rounded-md p-3"
+                        onClick={() => setSelectedIncidentId(inc.id)}
+                        className={`p-3 rounded-lg border transition-all cursor-pointer ${
+                          selectedIncidentId === inc.id
+                            ? "bg-brand-50 border-brand-300 shadow-xs"
+                            : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                        }`}
                       >
-                        <div className="flex items-center gap-2 mb-1">
-                          <AlertTriangle size={14} className="text-red-500" />
-                          <span className="font-semibold text-slate-900 text-sm">
-                            {inc.title}
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="font-mono text-[10px] font-bold text-slate-700">
+                            {inc.id}
                           </span>
+                          <SeverityBadge severity={inc.severity} />
                         </div>
-                        <div className="text-xs text-slate-600 ml-5">
-                          {inc.locationDetails}
-                        </div>
-                        <div className="mt-2 ml-5">
-                          <span className="text-xs font-semibold bg-red-100 text-red-700 px-2 py-0.5 rounded border border-red-200">
-                            {inc.severity.toUpperCase()}
-                          </span>
+                        <p className="text-xs font-semibold text-slate-900 line-clamp-1">
+                          {inc.title}
+                        </p>
+                        <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
+                          {inc.description}
+                        </p>
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/60">
+                          <StatusBadge status={inc.status} />
+                          <Link
+                            to={`/incidents/${inc.id}`}
+                            className="text-[11px] font-semibold text-brand-600 hover:underline flex items-center gap-1"
+                          >
+                            Inspect Dossier <ArrowRight size={11} />
+                          </Link>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <div className="text-sm text-slate-500 italic bg-slate-50 p-3 rounded border border-slate-200">
-                    No active incidents reported.
-                  </div>
                 )}
               </div>
 
-              {/* Safety Infrastructure */}
-              <div>
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
-                  Safety Info
-                </h4>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3 text-sm border border-slate-200 p-2 rounded hover:bg-slate-50 cursor-pointer transition-colors">
-                    <Navigation size={16} className="text-green-600" />
-                    <span className="font-medium">Primary Assembly: AP-1</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm border border-slate-200 p-2 rounded hover:bg-slate-50 cursor-pointer transition-colors">
-                    <ShieldAlert size={16} className="text-orange-500" />
-                    <span className="font-medium">Fire Extinguishers: 12</span>
-                  </div>
-                </div>
+              {/* Quick Actions */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <Link
+                  to={`/evacuation?building=${selectedBuilding.id}`}
+                  className="w-full py-2 px-3 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition shadow-xs"
+                >
+                  <Compass size={14} />
+                  <span>Plan Evacuation Corridor</span>
+                </Link>
+                <Link
+                  to={`/report?building=${selectedBuilding.id}`}
+                  className="w-full py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition shadow-xs"
+                >
+                  <AlertTriangle size={14} className="text-amber-500" />
+                  <span>Report An Incident Here</span>
+                </Link>
               </div>
             </div>
+          ) : (
+            <div className="light-card p-6 text-center space-y-3">
+              <MapPin size={32} className="mx-auto text-slate-400" />
+              <h3 className="text-sm font-bold text-slate-900">Select a Building</h3>
+              <p className="text-xs text-slate-500">
+                Click on any facility footprint on the campus map to inspect floor layouts, occupancy levels, and active hazards.
+              </p>
+            </div>
+          )}
+
+          {/* Quick Facility Index */}
+          <div className="light-card p-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+              Facility Index ({buildings.length})
+            </h3>
+            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+              {buildings.map((bld) => (
+                <button
+                  key={bld.id}
+                  onClick={() => setSelectedBuildingId(bld.id)}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition flex items-center justify-between ${
+                    selectedBuildingId === bld.id
+                      ? "bg-brand-50 text-brand-700 font-semibold"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="truncate">{bld.name}</span>
+                  <span className="text-[10px] font-mono text-slate-400">{bld.code}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

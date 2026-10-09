@@ -1,78 +1,90 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useDemo } from "../store/demoState";
-import { AlertTriangle, UploadCloud, CheckCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  Sparkles,
+  ArrowRight,
+  ShieldAlert,
+  Send,
+  Phone,
+  Flame,
+  CheckCircle2
+} from "lucide-react";
 
 const formSchema = z.object({
-  type: z.string().min(1, "Please select an incident type"),
-  buildingId: z.string().min(1, "Please select a building"),
+  category: z.string().min(1, "Please select an incident category"),
+  buildingId: z.string().min(1, "Please select a campus building"),
   locationDetails: z
     .string()
-    .min(5, "Please provide more specific location details"),
+    .min(2, "Please provide specific room or sector details"),
   severity: z.enum(["low", "medium", "high", "critical"], {
     message: "Please select a severity level",
   }),
   description: z.string().min(10, "Description must be at least 10 characters"),
-  peopleAffected: z.any().optional(),reporterName: z.string().min(2, "Name is required"),
+  peopleAffected: z.any().optional(),
+  reporterName: z.string().min(2, "Reporter name is required"),
   reporterContact: z.string().optional(),
 });
 
-interface FormValues {
-  type: string;
-  buildingId: string;
-  locationDetails: string;
-  severity: "critical" | "high" | "medium" | "low";
-  description: string;
-  reporterName: string;
-  reporterContact?: string;
-  peopleAffected?: number;
-}
+type FormValues = z.infer<typeof formSchema>;
 
 export default function ReportEmergency() {
-  const navigate = useNavigate();
-  const { buildings, addIncident } = useDemo();
+  const [searchParams] = useSearchParams();
+  const initialBuilding = searchParams.get("building") || "";
+
+  const { buildings, addIncident, currentUser } = useDemo();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdIncidentId, setCreatedIncidentId] = useState<string | null>(null);
-  const [createdIncidentScore, setCreatedIncidentScore] = useState<number | null>(null);
-  const [createdIncidentPriority, setCreatedIncidentPriority] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      type: "",
-      buildingId: "",
+      category: "fire",
+      buildingId: initialBuilding,
       severity: "high",
+      description: "",
+      locationDetails: "",
+      reporterName: currentUser?.name || "Campus Duty Officer",
+      reporterContact: "+91 98765 43210",
+      peopleAffected: 0,
     },
   });
+
+  const watchDesc = watch("description");
+  const watchCategory = watch("category");
+  const watchSeverity = watch("severity");
 
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
     try {
+      const selectedBld = buildings.find((b) => b.id === data.buildingId);
       const inc = await addIncident({
-        title: `${data.type} Report`,
-        type: data.type,
+        title: `${data.category.toUpperCase()} Emergency - ${selectedBld?.name || data.locationDetails}`,
+        type: data.category,
+        category: data.category,
         buildingId: data.buildingId,
+        location: `${selectedBld?.name || "Campus Building"}, ${data.locationDetails}`,
         locationDetails: data.locationDetails,
         severity: data.severity,
         status: "reported",
         description: data.description,
-        peopleAffected: data.peopleAffected as number | undefined,
+        peopleAffected: data.peopleAffected ? Number(data.peopleAffected) : 0,
         reporterName: data.reporterName,
         reporterContact: data.reporterContact,
       });
+
       setCreatedIncidentId(inc.id);
-      if (inc.aiAnalysis?.risk_assessment) {
-        setCreatedIncidentScore(inc.aiAnalysis.risk_assessment.risk_score);
-        setCreatedIncidentPriority(inc.aiAnalysis.risk_assessment.priority);
-      }
       setIsSuccess(true);
     } catch (e) {
       console.error(e);
@@ -81,282 +93,284 @@ export default function ReportEmergency() {
     }
   };
 
-  if (isSuccess) {
+  if (isSuccess && createdIncidentId) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-2xl mx-auto p-6 text-center">
-        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6 border-4 border-green-50 shadow-sm">
-          <CheckCircle size={40} className="text-green-600" />
-        </div>
-        <h2 className="text-3xl font-bold text-slate-900 mb-2">
-          Emergency Reported
-        </h2>
-        <p className="text-base text-slate-600 mb-6">
-          The incident has been logged and the Emergency Coordinator has received the alert.
-        </p>
+      <div className="max-w-2xl mx-auto py-12 px-4">
+        <div className="light-card p-8 text-center space-y-6 animate-in fade-in">
+          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600">
+            <CheckCircle2 size={36} />
+          </div>
 
-        {createdIncidentPriority && (
-          <div className="w-full bg-slate-50 border border-slate-200 rounded-lg p-4 mb-6 text-left shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                CampusOne AI Live Triage
-              </span>
-              <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">
-                AI PRIORITY: {createdIncidentPriority.toUpperCase()}
-              </span>
-            </div>
-            <p className="text-sm text-slate-700">
-              Evaluated with Risk Score <strong>{createdIncidentScore}/100</strong>. Automated responder resource matching and evacuation analysis have been delivered to the Emergency Coordinator.
+          <div className="space-y-2">
+            <span className="text-[11px] font-mono font-bold text-brand-600 bg-brand-50 px-2.5 py-0.5 rounded border border-brand-200">
+              {createdIncidentId}
+            </span>
+            <h1 className="text-2xl font-bold text-slate-900">
+              Emergency Broadcast Dispatched
+            </h1>
+            <p className="text-xs text-slate-600 max-w-md mx-auto">
+              Incident has been recorded in the central database, AI threat evaluation initiated, and notification sirens sent to command operators.
             </p>
           </div>
-        )}
 
-        <div className="flex flex-wrap gap-4 justify-center">
-          {createdIncidentId && (
-            <button
-              onClick={() => navigate(`/incidents/${createdIncidentId}`)}
-              className="bg-primary hover:bg-blue-600 text-white px-6 py-2.5 rounded-md font-semibold shadow-md transition-colors"
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex items-center justify-around">
+            <div>
+              <div className="text-[10px] uppercase font-bold text-slate-400">Severity</div>
+              <div className="font-bold text-critical uppercase mt-0.5">{watchSeverity}</div>
+            </div>
+            <div className="w-px h-8 bg-slate-200" />
+            <div>
+              <div className="text-[10px] uppercase font-bold text-slate-400">Status</div>
+              <div className="font-bold text-blue-600 mt-0.5">Triage Active</div>
+            </div>
+            <div className="w-px h-8 bg-slate-200" />
+            <div>
+              <div className="text-[10px] uppercase font-bold text-slate-400">AI Evaluation</div>
+              <div className="font-bold text-ai-600 mt-0.5 flex items-center gap-1">
+                <Sparkles size={12} />
+                <span>Synchronized</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+            <Link
+              to={`/incidents/${createdIncidentId}`}
+              className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg shadow-xs flex items-center justify-center gap-2 transition"
             >
-              View Incident Details
-            </button>
-          )}
-          <button
-            onClick={() => navigate("/incidents")}
-            className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-6 py-2.5 rounded-md font-semibold shadow-sm transition-colors"
-          >
-            Incident List
-          </button>
-          <button
-            onClick={() => {
-              setIsSuccess(false);
-              navigate("/dashboard");
-            }}
-            className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2.5 rounded-md font-semibold transition-colors"
-          >
-            Dashboard
-          </button>
+              <span>View Incident Dossier</span>
+              <ArrowRight size={14} />
+            </Link>
+            <Link
+              to="/command-center"
+              className="px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg shadow-xs flex items-center justify-center gap-2 transition"
+            >
+              <span>Return to Command Center</span>
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto pb-12">
-      <div className="mb-8 border-b border-border pb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-3 bg-red-100 text-red-600 rounded-lg">
-            <AlertTriangle size={28} />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              Report Emergency
-            </h1>
-            <p className="text-slate-500 mt-1">
-              Please provide accurate details to help dispatch the correct
-              response team.
-            </p>
-          </div>
+    <div className="flex flex-col h-full max-w-5xl mx-auto space-y-6 pb-12">
+      {/* Header */}
+      <div className="light-card p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-critical bg-red-50 px-2.5 py-0.5 rounded-md border border-red-200 flex items-center gap-1.5">
+            <AlertTriangle size={12} className="text-critical" />
+            Emergency Intake Portal
+          </span>
+          <span className="text-xs text-slate-500 font-medium">Rapid Incident Broadcast</span>
         </div>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          Report Campus Emergency
+        </h1>
+        <p className="text-xs text-slate-600 mt-1">
+          Submit crisis reports with location telemetry. The EngineX AI engine will immediately extract threat vectors and notify response teams.
+        </p>
       </div>
 
-      <div className="bg-panel border border-border rounded-xl shadow-sm overflow-hidden">
-        <div className="bg-slate-50 border-b border-border p-4 text-sm text-slate-600">
-          <span className="font-bold text-slate-900">Note:</span> This is a
-          demonstration interface. No actual emergency services will be
-          contacted.
-        </div>
-
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="p-6 md:p-8 space-y-8"
-        >
-          {/* Incident Type & Severity */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">
-                Incident Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                {...register("type")}
-                className={`w-full p-2.5 border rounded-md bg-white focus:ring-2 focus:ring-primary focus:outline-none ${errors.type ? "border-red-500" : "border-slate-300"}`}
-              >
-                <option value="" disabled>
-                  Select Type
-                </option>
-                <option value="Fire">Fire / Smoke</option>
-                <option value="Medical Emergency">Medical Emergency</option>
-                <option value="Security Threat">Security Threat</option>
-                <option value="Gas Leak">Gas Leak</option>
-                <option value="Structural Hazard">Structural Hazard</option>
-                <option value="Flooding">Flooding</option>
-                <option value="Electrical Hazard">Electrical Hazard</option>
-                <option value="Other">Other</option>
-              </select>
-              {errors.type && (
-                <p className="text-xs text-red-500">{errors.type.message}</p>
-              )}
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Form Container */}
+        <form onSubmit={handleSubmit(onSubmit)} className="lg:col-span-8 light-card p-6 space-y-5">
+          {/* Incident Category */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Emergency Category *
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { id: "fire", label: "Fire & Smoke", icon: Flame },
+                { id: "medical", label: "Medical", icon: ShieldAlert },
+                { id: "hazmat", label: "HazMat / Gas", icon: AlertTriangle },
+                { id: "security", label: "Security Threat", icon: ShieldAlert },
+              ].map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  onClick={() => setValue("category", item.id)}
+                  className={`p-3 rounded-lg border text-left transition flex flex-col justify-between ${
+                    watchCategory === item.id
+                      ? "bg-brand-50 border-brand-500 text-brand-900 ring-2 ring-brand-400 shadow-xs"
+                      : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  <item.icon size={16} className={watchCategory === item.id ? "text-brand-600" : "text-slate-400"} />
+                  <span className="text-xs font-bold mt-2">{item.label}</span>
+                </button>
+              ))}
             </div>
+            {errors.category && (
+              <p className="text-[11px] text-critical font-medium">{errors.category.message}</p>
+            )}
+          </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">
-                Severity <span className="text-red-500">*</span>
-              </label>
-              <select
-                {...register("severity")}
-                className={`w-full p-2.5 border rounded-md bg-white focus:ring-2 focus:ring-primary focus:outline-none ${errors.severity ? "border-red-500" : "border-slate-300"}`}
-              >
-                <option value="low">Low (Non-urgent)</option>
-                <option value="medium">Medium (Requires attention)</option>
-                <option value="high">High (Urgent response needed)</option>
-                <option value="critical">
-                  Critical (Immediate danger to life)
-                </option>
-              </select>
-              {errors.severity && (
-                <p className="text-xs text-red-500">
-                  {errors.severity.message}
-                </p>
-              )}
+          {/* Severity Level */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Assessed Severity Tier *
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { id: "critical", label: "Critical", desc: "Life Threat / Evac" },
+                { id: "high", label: "High", desc: "Immediate Dispatch" },
+                { id: "medium", label: "Medium", desc: "Containment Needed" },
+                { id: "low", label: "Low", desc: "Advisory / Stable" },
+              ].map((sev) => (
+                <button
+                  type="button"
+                  key={sev.id}
+                  onClick={() => setValue("severity", sev.id as any)}
+                  className={`p-2.5 rounded-lg border text-center transition ${
+                    watchSeverity === sev.id
+                      ? sev.id === "critical"
+                        ? "bg-red-50 border-red-500 text-red-900 ring-2 ring-red-400"
+                        : "bg-brand-50 border-brand-500 text-brand-900 ring-2 ring-brand-400"
+                      : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  <div className="text-xs font-bold uppercase">{sev.label}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{sev.desc}</div>
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Location */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">
-                Building <span className="text-red-500">*</span>
+          {/* Location & Building */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Campus Building *
               </label>
               <select
                 {...register("buildingId")}
-                className={`w-full p-2.5 border rounded-md bg-white focus:ring-2 focus:ring-primary focus:outline-none ${errors.buildingId ? "border-red-500" : "border-slate-300"}`}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-brand-400"
               >
-                <option value="" disabled>
-                  Select Building
-                </option>
+                <option value="">Select campus facility...</option>
                 {buildings.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name}
+                    {b.name} ({b.code || b.id}) - {b.occupancy} Occupants
                   </option>
                 ))}
               </select>
               {errors.buildingId && (
-                <p className="text-xs text-red-500">
-                  {errors.buildingId.message}
-                </p>
+                <p className="text-[11px] text-critical font-medium">{errors.buildingId.message}</p>
               )}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">
-                Specific Location <span className="text-red-500">*</span>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Specific Location / Room Details *
               </label>
               <input
                 type="text"
-                placeholder="e.g., Room 402, North Wing Stairwell"
                 {...register("locationDetails")}
-                className={`w-full p-2.5 border rounded-md bg-white focus:ring-2 focus:ring-primary focus:outline-none ${errors.locationDetails ? "border-red-500" : "border-slate-300"}`}
+                placeholder="e.g. 2nd Floor, Organic Chemistry Lab 204"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-brand-400"
               />
               {errors.locationDetails && (
-                <p className="text-xs text-red-500">
-                  {errors.locationDetails.message}
-                </p>
+                <p className="text-[11px] text-critical font-medium">{errors.locationDetails.message}</p>
               )}
             </div>
           </div>
 
           {/* Description */}
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">
-              Description <span className="text-red-500">*</span>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center justify-between">
+              <span>Incident Description & Observed Hazards *</span>
+              <span className="text-[10px] text-slate-400 font-mono">{watchDesc?.length || 0} characters</span>
             </label>
             <textarea
               rows={4}
-              placeholder="Please describe the situation, hazards, and any immediate needs."
               {...register("description")}
-              className={`w-full p-2.5 border rounded-md bg-white focus:ring-2 focus:ring-primary focus:outline-none ${errors.description ? "border-red-500" : "border-slate-300"}`}
+              placeholder="Describe the nature of the emergency, chemical involvement, smoke density, trapped individuals, and immediate risks..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-brand-400"
             />
             {errors.description && (
-              <p className="text-xs text-red-500">
-                {errors.description.message}
-              </p>
+              <p className="text-[11px] text-critical font-medium">{errors.description.message}</p>
             )}
           </div>
 
-          {/* Additional Info */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">
-                Reporter Name <span className="text-red-500">*</span>
+          {/* Reporter Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Reporter Name *
               </label>
               <input
                 type="text"
                 {...register("reporterName")}
-                className={`w-full p-2.5 border rounded-md bg-white focus:ring-2 focus:ring-primary focus:outline-none ${errors.reporterName ? "border-red-500" : "border-slate-300"}`}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-brand-400"
               />
-              {errors.reporterName && (
-                <p className="text-xs text-red-500">
-                  {errors.reporterName.message}
-                </p>
-              )}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">
-                Contact Number
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Contact Phone / Radio Callsign
               </label>
               <input
                 type="text"
                 {...register("reporterContact")}
-                className="w-full p-2.5 border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-primary focus:outline-none"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">
-                Est. People Affected
-              </label>
-              <input
-                type="number"
-                min="0"
-                {...register("peopleAffected")}
-                className="w-full p-2.5 border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-primary focus:outline-none"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-brand-400"
               />
             </div>
           </div>
 
-          {/* Photo Upload (Visual only) */}
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">
-              Attach Photo (Optional)
-            </label>
-            <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:bg-slate-50 transition-colors cursor-pointer">
-              <UploadCloud size={32} className="mx-auto text-slate-400 mb-3" />
-              <p className="text-sm text-slate-600 font-medium">
-                Click to upload or drag and drop
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                PNG, JPG up to 10MB (Frontend Preview Only)
-              </p>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="pt-6 border-t border-border flex justify-end gap-4">
-            <button
-              type="button"
-              onClick={() => navigate("/dashboard")}
-              className="px-6 py-2.5 rounded-md font-medium text-slate-600 hover:bg-slate-100 transition-colors"
-            >
-              Cancel
-            </button>
+          {/* Submit Action */}
+          <div className="pt-3">
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`px-8 py-2.5 rounded-md font-bold text-white shadow-md transition-colors ${isSubmitting ? "bg-red-400 cursor-not-allowed" : "bg-critical hover:bg-red-700"}`}
+              className="w-full py-3 bg-critical hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider rounded-lg shadow-xs transition flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {isSubmitting ? "Submitting..." : "Submit Emergency Report"}
+              <Send size={15} />
+              <span>{isSubmitting ? "Dispatching Emergency Broadcast..." : "Broadcast Emergency Incident"}</span>
             </button>
           </div>
         </form>
+
+        {/* Live AI Intake Assistant Preview */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="ai-card p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-ai-600" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ai-900">
+                Real-Time AI Intake Assistant
+              </h3>
+            </div>
+            <p className="text-xs text-ai-800 leading-relaxed">
+              As you type, EngineX evaluates the threat vectors, matches certified campus responders, and maps hazard perimeters.
+            </p>
+
+            <div className="p-3.5 bg-white rounded-lg border border-ai-200 text-xs space-y-2">
+              <div className="font-semibold text-slate-800 flex items-center justify-between">
+                <span>Threat Anticipation</span>
+                <span className="font-mono text-[10px] text-ai-600 font-bold uppercase">{watchSeverity}</span>
+              </div>
+              <p className="text-[11px] text-slate-600">
+                {watchDesc && watchDesc.length > 10
+                  ? `Synthesizing details for ${watchCategory} incident. Automated safe corridor will prioritize Assembly Point 1.`
+                  : "Enter a detailed description to preview AI threat factors and dispatch recommendations."}
+              </p>
+            </div>
+          </div>
+
+          {/* Campus Helpline Notice */}
+          <div className="light-card p-5 space-y-2 border-slate-200">
+            <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+              <Phone size={13} className="text-brand-600" />
+              Direct Emergency Hotlines
+            </h4>
+            <div className="text-xs text-slate-600 space-y-1">
+              <div>Campus Control: <strong className="text-slate-900">+91 98765 43210</strong></div>
+              <div>Medical Center: <strong className="text-slate-900">Ext 222</strong></div>
+              <div>Fire Station: <strong className="text-slate-900">Ext 101</strong></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

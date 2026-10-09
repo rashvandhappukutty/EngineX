@@ -1,39 +1,73 @@
+/** @type {import('tailwindcss').Config} */
 export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       colors: {
-        background: '#F3F4F6', // Lighter elegant gray
-        sidebar: '#0B1121', // Deep midnight blue
-        panel: '#FFFFFF', // Crisp white panels
-        primary: '#4F46E5', // Indigo-600
-        primaryHover: '#4338CA', // Indigo-700
-        secondary: '#0EA5E9', // Sky-500
-        critical: '#EF4444', 
+        brand: {
+          50: '#EFF6FF',
+          100: '#DBEAFE',
+          200: '#BFDBFE',
+          300: '#93C5FD',
+          400: '#60A5FA',
+          500: '#3978F6',
+          600: '#2563EB',
+          700: '#1D4ED8',
+          800: '#1E40AF',
+          900: '#1E3A8A',
+        },
+        ai: {
+          light: '#EEF2FF',
+          border: '#C7D2FE',
+          DEFAULT: '#6366F1',
+          accent: '#4F46E5',
+          text: '#4338CA',
+        },
+        slate: {
+          850: '#172033',
+          950: '#0B0F19',
+        },
+        background: '#F8FAFC',
+        sidebar: '#FFFFFF',
+        panel: '#FFFFFF',
+        panelSubtle: '#F8FAFC',
+        primary: '#3978F6',
+        primaryHover: '#2563EB',
+        secondary: '#6366F1',
+        critical: '#DC2626',
+        criticalLight: '#FEF2F2',
+        criticalBorder: '#FECACA',
         high: '#F97316',
-        medium: '#EAB308',
+        highLight: '#FFF7ED',
+        highBorder: '#FFEDD5',
+        medium: '#F59E0B',
+        mediumLight: '#FEF3C7',
+        mediumBorder: '#FDE68A',
         low: '#10B981',
-        text: '#111827', // Gray-900
-        muted: '#6B7280', // Gray-500
-        border: '#E5E7EB', // Gray-200
-        sidebarText: '#F3F4F6', // Gray-100
-        sidebarHover: '#1F2937', // Gray-800
+        lowLight: '#ECFDF5',
+        lowBorder: '#A7F3D0',
+        text: '#172033',
+        muted: '#64748B',
+        border: '#E5EAF1',
+        borderDarker: '#CBD5E1',
+        sidebarText: '#64748B',
+        sidebarHover: '#F1F5F9',
       },
       boxShadow: {
-        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
-        'glow': '0 0 15px rgba(79, 70, 229, 0.5)',
+        'card': '0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05)',
+        'card-hover': '0 4px 12px 0 rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04)',
+        'ai-glow': '0 0 16px -2px rgba(99, 102, 241, 0.25)',
+        'blue-glow': '0 0 16px -2px rgba(57, 120, 246, 0.25)',
       },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'sidebar-gradient': 'linear-gradient(180deg, #0B1121 0%, #111827 100%)',
-      }
     },
   },
   plugins: [],
-}
+};
