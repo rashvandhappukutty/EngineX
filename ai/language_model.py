@@ -280,9 +280,10 @@ def get_language_model_adapter(
         ConfigurableLLMAdapter, MockLanguageModelAdapter, or RuleBasedFallbackAdapter.
     """
     cfg = config or ModelConfig()
+    effective_callable = custom_callable if custom_callable is not None else cfg.custom_callable
 
-    if custom_callable is not None:
-        return ConfigurableLLMAdapter(llm_callable=custom_callable, config=cfg)
+    if effective_callable is not None:
+        return ConfigurableLLMAdapter(llm_callable=effective_callable, config=cfg)
 
     if cfg.provider == "custom_llm":
         return ConfigurableLLMAdapter(llm_callable=None, config=cfg)

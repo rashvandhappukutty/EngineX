@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 
 @dataclass
@@ -14,6 +14,7 @@ class ModelConfig:
     fallback_on_failure: bool = True
     confidence_threshold: float = 0.50
     strict_schema_validation: bool = True
+    custom_callable: Optional[Callable[[str], Dict[str, Any]]] = None
 
 
 @dataclass
