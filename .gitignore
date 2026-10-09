@@ -1,0 +1,36 @@
+# Python & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Databases & Local state
+*.db
+*.sqlite
+*.sqlite3
+enginex.db
+test_enginex.db
+
+# Environment variables & secrets
+.env
+.env.local
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
