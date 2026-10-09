@@ -101,3 +101,63 @@ def test_assignment_creation_rollback_on_history_failure(client, db_session):
         assert inc_obj.status == "Reported"
     finally:
         fresh_session.close()
+
+
+def test_cannot_assign_team_to_resolved_incident(client, db_session):
+    inc_res = client.post("/api/v1/reports", json={
+        "title": "Minor Kitchen Fire",
+        "description": "Stove fire extinguished.",
+        "category": "Fire",
+        "severity": "Low",
+        "location_name": "Cafeteria",
+    })
+    inc_id = inc_res.json()["id"]
+
+    team_res = client.post("/api/v1/teams", json={
+        "name": "Fire Crew 1",
+        "capabilities": ["firefighting"],
+    })
+    team_id = team_res.json()["id"]
+
+    client.patch(f"/api/v1/reports/{inc_id}/status", json={"status": "Resolved"})
+
+    asgn_res = client.post("/api/v1/assignments", json={
+        "incident_id": inc_id,
+        "team_id": team_id,
+    })
+    assert asgn_res.status_code == 400
+    assert "status is 'resolved'" in asgn_res.json()["detail"].lower()
+
+    assert db_session.query(Assignment).filter(Assignment.incident_id == inc_id).count() == 0
+    team_check = client.get(f"/api/v1/teams/{team_id}").json()
+    assert team_check["availability_status"] == "Available"
+
+
+def test_cannot_assign_team_to_cancelled_incident(client, db_session):
+    inc_res = client.post("/api/v1/reports", json={
+        "title": "False Alarm Call",
+        "description": "Spurious sensor trigger.",
+        "category": "Security",
+        "severity": "Low",
+        "location_name": "Gate 1",
+    })
+    inc_id = inc_res.json()["id"]
+
+    team_res = client.post("/api/v1/teams", json={
+        "name": "Security Patrol Alpha",
+        "capabilities": ["patrol"],
+    })
+    team_id = team_res.json()["id"]
+
+    client.patch(f"/api/v1/reports/{inc_id}/status", json={"status": "Cancelled"})
+
+    asgn_res = client.post("/api/v1/assignments", json={
+        "incident_id": inc_id,
+        "team_id": team_id,
+    })
+    assert asgn_res.status_code == 400
+    assert "status is 'cancelled'" in asgn_res.json()["detail"].lower()
+
+    assert db_session.query(Assignment).filter(Assignment.incident_id == inc_id).count() == 0
+    team_check = client.get(f"/api/v1/teams/{team_id}").json()
+    assert team_check["availability_status"] == "Available"

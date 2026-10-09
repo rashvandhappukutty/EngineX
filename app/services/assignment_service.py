@@ -33,6 +33,13 @@ class AssignmentService:
                 detail=f"Incident with ID {assignment_in.incident_id} not found",
             )
 
+        # 1b. Reject assignments to closed incidents (Resolved or Cancelled)
+        if incident.status in (IncidentStatus.RESOLVED, IncidentStatus.CANCELLED):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot assign response team to Incident #{incident.id} because its status is '{incident.status}'.",
+            )
+
         # 2. Validate team existence
         team = db.query(Team).filter(Team.id == assignment_in.team_id).first()
         if not team:
