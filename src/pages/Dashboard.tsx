@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useDemo } from "../store/demoState";
 import { Link } from "react-router-dom";
 import {
@@ -12,11 +13,27 @@ import {
   Truck,
   Siren,
   Bell,
+  Sparkles,
+  Cpu,
+  Server,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { getAIStatus, checkBackendHealth, type AIStatusResponse } from "../services/api";
 
 export default function Dashboard() {
   const { incidents, responders, resources, alerts, currentUser } = useDemo();
+  const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);
+  const [backendOnline, setBackendOnline] = useState<boolean>(true);
+
+  useEffect(() => {
+    async function loadStatus() {
+      const health = await checkBackendHealth();
+      setBackendOnline(health !== null && health.status !== "offline");
+      const status = await getAIStatus();
+      setAiStatus(status);
+    }
+    loadStatus();
+  }, []);
 
   // Metrics
   const activeIncidents = incidents.filter(
@@ -128,6 +145,46 @@ export default function Dashboard() {
               View All Incidents <ArrowRight size={18} />
             </Link>
           )}
+        </div>
+      </div>
+
+      {/* Backend & AI Engine Status Bar */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-xl p-4 shadow-md border border-indigo-500/20 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400 border border-indigo-400/30">
+            <Sparkles size={18} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                CampusOne AI Engine
+              </span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-500/30">
+                OPERATIONAL
+              </span>
+            </div>
+            <p className="text-sm font-semibold text-slate-100">
+              Active Provider:{" "}
+              {aiStatus?.nlu_provider === "gemini" && aiStatus.gemini_configured
+                ? `Google Gemini NLU (${aiStatus.gemini_model || "gemini-2.5-flash"})`
+                : "Deterministic CampusOne Safety Floor Engine"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-md border border-white/10">
+            <Server size={14} className={backendOnline ? "text-emerald-400" : "text-amber-400"} />
+            <span className="text-slate-300">FastAPI Backend:</span>
+            <span className="font-bold text-white">
+              {backendOnline ? "Connected (Port 8000)" : "Connecting..."}
+            </span>
+          </div>
+          <div className="hidden lg:flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-md border border-white/10">
+            <Cpu size={14} className="text-indigo-400" />
+            <span className="text-slate-300">Decision Support:</span>
+            <span className="font-bold text-white">Advisory (Human Review Enforced)</span>
+          </div>
         </div>
       </div>
 

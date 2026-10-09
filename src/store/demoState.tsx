@@ -1,5 +1,9 @@
 import { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
+import {
+  type AIAnalysisResult,
+  analyzeSituationWithAI,
+} from "../services/api";
 
 export type Severity = "critical" | "high" | "medium" | "low";
 export type IncidentStatus =
@@ -33,6 +37,7 @@ export interface Incident {
   assignedTeamId?: string;
   notes: string[];
   timeline: TimelineEvent[];
+  aiAnalysis?: AIAnalysisResult;
 }
 
 export interface Building {
@@ -132,9 +137,9 @@ export interface DemoState {
   addIncident: (
     incident: Omit<
       Incident,
-      "id" | "reportedTime" | "lastUpdate" | "timeline" | "notes"
+      "id" | "reportedTime" | "lastUpdate" | "timeline" | "notes" | "aiAnalysis"
     >,
-  ) => void;
+  ) => Promise<Incident>;
   updateIncident: (id: string, updates: Partial<Incident>) => void;
   updateResponder: (id: string, updates: Partial<Responder>) => void;
   updateResource: (id: string, updates: Partial<Resource>) => void;
@@ -142,6 +147,7 @@ export interface DemoState {
   toggleEdgeBlock: (edgeId: string) => void;
   markAlertRead: (id: string) => void;
   markAllAlertsRead: () => void;
+  refreshAIAnalysis: (incidentId: string) => Promise<AIAnalysisResult | null>;
   logout: () => void;
   resetDemoData: () => void;
 }
@@ -272,7 +278,7 @@ const defaultState: DemoState = {
       locationDetails: "Floor 2, Lab 3",
       description:
         "Thick black smoke seen coming from under the door of Lab 3. Alarm has triggered.",
-      severity: "high",
+      severity: "critical",
       status: "reported",
       reportedTime: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
       lastUpdate: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
@@ -286,7 +292,97 @@ const defaultState: DemoState = {
           time: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
           message: "Incident reported by Dr. Smith",
         },
+        {
+          id: "T1-AI",
+          time: new Date(Date.now() - 1000 * 60 * 14).toISOString(),
+          message:
+            "[CampusOne AI] Threat Assessed: Critical (Risk Score: 88/100). Safety floor enforced for active smoke/fire hazard.",
+        },
       ],
+      aiAnalysis: {
+        incident_id: "INC-20261009-001",
+        categories: ["Fire", "Life Safety Hazard", "Infrastructure"],
+        summary:
+          "Active smoke emission detected from Science Laboratory Floor 2 Lab 3 with fire alarm activation.",
+        affected_location: "Science Laboratory - Floor 2, Lab 3",
+        risk_assessment: {
+          priority: "Critical",
+          risk_score: 88,
+          priority_score: 88,
+          risk_factors: [
+            "Critical safety hazard detected: 'smoke'",
+            "Critical safety hazard detected: 'alarm'",
+            "Safety floor enforced: Guaranteed >= 88 for life-safety hazard",
+          ],
+          reasoning_summary:
+            "Priority evaluated as Critical (Risk Score: 88/100, Uncertainty: Low). Immediate smoke threat with alarm activation in chemical lab environment.",
+          uncertainty_level: "Low",
+          requires_human_review: true,
+          missing_information: [
+            "Hazardous chemical inventory in Lab 3",
+            "Exact count of remaining building occupants",
+          ],
+          is_safety_critical: true,
+          potential_harm_level: "Severe / Life Threatening",
+          immediacy_of_danger: "Immediate",
+        },
+        recommended_department: "Campus Fire & Emergency Services",
+        recommended_actions: [
+          {
+            action: "Dispatch Fire Response Alpha",
+            priority: "Immediate",
+            description: "Deploy SCBA-equipped firefighters to Floor 2 of Science Laboratory.",
+            role_responsible: "Emergency Coordinator",
+          },
+          {
+            action: "Trigger Science Lab Evacuation",
+            priority: "Immediate",
+            description: "Direct occupants toward Assembly Point North via unobstructed stairwells.",
+            role_responsible: "Security / Floor Wardens",
+          },
+          {
+            action: "Isolate Lab Ventilation",
+            priority: "High",
+            description: "Request facilities shut down HVAC zone to prevent smoke propagation.",
+            role_responsible: "Facilities",
+          },
+        ],
+        resource_recommendations: [
+          {
+            team_name: "Fire Response Alpha",
+            specialization: "Fire & Hazmat",
+            match_score: 95,
+            rationale: "Highest capability match for structural smoke and potential chemical fire.",
+            recommended_equipment: ["SCBA Gear", "CO2 Extinguishers", "Thermal Camera"],
+          },
+          {
+            team_name: "Campus Security Alpha",
+            specialization: "Security",
+            match_score: 85,
+            rationale: "Establish 100-meter safety cordon and clear evacuation corridor.",
+          },
+        ],
+        related_incidents: [],
+        evacuation_recommendation: {
+          status: "evacuation_recommended",
+          route: ["Science Lab Exit North", "Perimeter Path", "North Assembly Lawn"],
+          safe_zone: "North Assembly Lawn",
+          accessibility_verified: true,
+          hazards_avoided: ["Science Lab 2nd Floor Central Hallway"],
+        },
+        uncertainty: {
+          level: "Low",
+          nlu_confidence: 0.95,
+          classification_confidence: 0.98,
+          missing_information: ["Chemical storage status"],
+          conflicting_elements: [],
+          is_unfamiliar: false,
+          model_provider: "gemini",
+        },
+        requires_human_review: true,
+        explanation:
+          "CampusOne AI evaluated structural smoke and active alarms. Safety floor guarantees Critical priority.",
+      },
     },
     {
       id: "INC-20261009-002",
@@ -314,6 +410,72 @@ const defaultState: DemoState = {
           message: "Medical Team Alpha assigned.",
         },
       ],
+      aiAnalysis: {
+        incident_id: "INC-20261009-002",
+        categories: ["Medical Emergency", "Life Safety Hazard"],
+        summary: "Unresponsive student collapse reported at Cafeteria entrance.",
+        affected_location: "Cafeteria - Main Floor",
+        risk_assessment: {
+          priority: "Critical",
+          risk_score: 92,
+          priority_score: 92,
+          risk_factors: [
+            "Critical hazard: 'unresponsive'",
+            "Critical hazard: 'collapsed'",
+            "Immediate life-support required",
+          ],
+          reasoning_summary:
+            "Priority evaluated as Critical (Risk Score: 92/100). Severe medical emergency requiring immediate CPR/AED intervention.",
+          uncertainty_level: "Low",
+          requires_human_review: true,
+          missing_information: ["Student vitals/pulse status", "AED deployment status"],
+          is_safety_critical: true,
+          potential_harm_level: "Severe / Life Threatening",
+          immediacy_of_danger: "Immediate",
+        },
+        recommended_department: "Campus Health & Paramedic Dispatch",
+        recommended_actions: [
+          {
+            action: "Deploy AED & First Responder",
+            priority: "Immediate",
+            description: "Retrieve AED from Cafeteria lobby and begin emergency first response.",
+            role_responsible: "First Aid Team",
+          },
+          {
+            action: "Call City Paramedic Unit",
+            priority: "Immediate",
+            description: "Coordinate with 911 for priority ambulance transfer.",
+            role_responsible: "Emergency Coordinator",
+          },
+        ],
+        resource_recommendations: [
+          {
+            team_name: "Medical Team Alpha",
+            specialization: "Medical Emergency",
+            match_score: 98,
+            rationale: "Certified EMT and paramedic staff on standby.",
+            recommended_equipment: ["AED Unit", "Trauma Kit", "Oxygen Tank"],
+          },
+        ],
+        related_incidents: [],
+        evacuation_recommendation: {
+          status: "clear_ingress_route",
+          route: ["Main Gate", "Campus Drive", "Cafeteria South Bay"],
+          safe_zone: "Cafeteria Medical Staging",
+          accessibility_verified: true,
+        },
+        uncertainty: {
+          level: "Low",
+          nlu_confidence: 0.98,
+          classification_confidence: 0.99,
+          missing_information: [],
+          conflicting_elements: [],
+          is_unfamiliar: false,
+          model_provider: "gemini",
+        },
+        requires_human_review: true,
+        explanation: "Critical medical distress detected. Rapid paramedic dispatch recommended.",
+      },
     },
   ],
   buildings: defaultBuildings,
@@ -566,7 +728,7 @@ const defaultState: DemoState = {
     },
   ],
   setCurrentUser: () => {},
-  addIncident: () => {},
+  addIncident: async () => ({} as Incident),
   updateIncident: () => {},
   updateResponder: () => {},
   updateResource: () => {},
@@ -574,6 +736,7 @@ const defaultState: DemoState = {
   toggleEdgeBlock: () => {},
   markAlertRead: () => {},
   markAllAlertsRead: () => {},
+  refreshAIAnalysis: async () => null,
   logout: () => {},
   resetDemoData: () => {},
 };
@@ -625,43 +788,88 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     ]);
   };
 
-  const addIncident = (
+  const addIncident = async (
     incidentData: Omit<
       Incident,
-      "id" | "reportedTime" | "lastUpdate" | "timeline" | "notes"
+      "id" | "reportedTime" | "lastUpdate" | "timeline" | "notes" | "aiAnalysis"
     >,
-  ) => {
+  ): Promise<Incident> => {
     const timestamp = new Date().toISOString();
     const dateStr = new Date().toISOString().split("T")[0].replace(/-/g, "");
     const newId = `INC-${dateStr}-${String(incidents.length + 1).padStart(3, "0")}`;
+    const buildingObj = buildings.find((b) => b.id === incidentData.buildingId);
+    const locationName = buildingObj
+      ? `${buildingObj.name} (${incidentData.locationDetails})`
+      : incidentData.locationDetails;
+
+    let aiResult: AIAnalysisResult | null = null;
+    try {
+      aiResult = await analyzeSituationWithAI({
+        title: incidentData.title,
+        description: incidentData.description,
+        incident_id: newId,
+        location: locationName,
+        reporter_role: incidentData.reporterName,
+        resources: responders.map((r) => ({
+          team_name: r.name,
+          specialization: r.specialization,
+          status: r.status,
+          skills: r.skills,
+        })),
+      });
+    } catch (e) {
+      console.warn("AI situation analysis error:", e);
+    }
+
+    let finalSeverity: Severity = incidentData.severity;
+    if (aiResult?.risk_assessment?.priority) {
+      const p = aiResult.risk_assessment.priority.toLowerCase();
+      if (p === "critical") finalSeverity = "critical";
+      else if (p === "high" && finalSeverity !== "critical") finalSeverity = "high";
+      else if (p === "medium" && finalSeverity === "low") finalSeverity = "medium";
+    }
+
+    const timelineEvents: TimelineEvent[] = [
+      {
+        id: `TL-${Date.now()}`,
+        time: timestamp,
+        message: "Incident reported.",
+      },
+    ];
+
+    if (aiResult) {
+      timelineEvents.unshift({
+        id: `TL-${Date.now() + 1}`,
+        time: new Date().toISOString(),
+        message: `[CampusOne AI] Threat Assessed: Priority ${aiResult.risk_assessment.priority} (Risk Score: ${aiResult.risk_assessment.risk_score}/100)${aiResult.requires_human_review ? " • Mandatory Human Review Required" : ""}`,
+      });
+    }
+
     const newIncident: Incident = {
       ...incidentData,
       id: newId,
+      severity: finalSeverity,
       reportedTime: timestamp,
       lastUpdate: timestamp,
       notes: [],
-      timeline: [
-        {
-          id: `TL-${Date.now()}`,
-          time: timestamp,
-          message: "Incident reported.",
-        },
-      ],
+      timeline: timelineEvents,
+      aiAnalysis: aiResult || undefined,
     };
+
     setIncidents((prev) => [newIncident, ...prev]);
 
     // Create Alert
     createAlert(
-      `New ${incidentData.type} reported in ${buildings.find((b) => b.id === incidentData.buildingId)?.name || "Campus"}`,
-      incidentData.severity,
-      "System",
+      `New ${incidentData.type} reported in ${buildingObj?.name || "Campus"} (AI Priority: ${aiResult?.risk_assessment.priority || finalSeverity.toUpperCase()})`,
+      finalSeverity,
+      "CampusOne AI",
       newId,
     );
 
     // Update building status if it's high/critical
     if (
-      incidentData.severity === "high" ||
-      incidentData.severity === "critical"
+      finalSeverity === "high" ||
+      finalSeverity === "critical"
     ) {
       setBuildings((prev) =>
         prev.map((b) =>
@@ -669,6 +877,55 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         ),
       );
     }
+
+    return newIncident;
+  };
+
+  const refreshAIAnalysis = async (
+    incidentId: string,
+  ): Promise<AIAnalysisResult | null> => {
+    const inc = incidents.find((i) => i.id === incidentId);
+    if (!inc) return null;
+    const buildingObj = buildings.find((b) => b.id === inc.buildingId);
+    const locationName = buildingObj
+      ? `${buildingObj.name} (${inc.locationDetails})`
+      : inc.locationDetails;
+
+    const aiResult = await analyzeSituationWithAI({
+      title: inc.title,
+      description: inc.description,
+      incident_id: inc.id,
+      location: locationName,
+      reporter_role: inc.reporterName,
+      resources: responders.map((r) => ({
+        team_name: r.name,
+        specialization: r.specialization,
+        status: r.status,
+        skills: r.skills,
+      })),
+    });
+
+    if (aiResult) {
+      let finalSeverity = inc.severity;
+      const p = aiResult.risk_assessment?.priority?.toLowerCase();
+      if (p === "critical") finalSeverity = "critical";
+      else if (p === "high" && finalSeverity !== "critical") finalSeverity = "high";
+
+      updateIncident(incidentId, {
+        aiAnalysis: aiResult,
+        severity: finalSeverity,
+        timeline: [
+          {
+            id: `TL-${Date.now()}`,
+            time: new Date().toISOString(),
+            message: `[CampusOne AI] Intelligence Updated: Priority ${aiResult.risk_assessment.priority} (Score: ${aiResult.risk_assessment.risk_score}/100)`,
+          },
+          ...inc.timeline,
+        ],
+      });
+    }
+
+    return aiResult;
   };
 
   const updateIncident = (id: string, updates: Partial<Incident>) => {
@@ -834,6 +1091,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         toggleEdgeBlock,
         markAlertRead,
         markAllAlertsRead,
+        refreshAIAnalysis,
         logout,
         resetDemoData,
       }}

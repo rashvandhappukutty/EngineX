@@ -36,6 +36,9 @@ export default function ReportEmergency() {
   const { buildings, addIncident } = useDemo();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [createdIncidentId, setCreatedIncidentId] = useState<string | null>(null);
+  const [createdIncidentScore, setCreatedIncidentScore] = useState<number | null>(null);
+  const [createdIncidentPriority, setCreatedIncidentPriority] = useState<string | null>(null);
 
   const {
     register,
@@ -50,11 +53,10 @@ export default function ReportEmergency() {
     },
   });
 
-  const onSubmit = (data: FormValues) => {
+  const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
-    // Simulate network request
-    setTimeout(() => {
-      addIncident({
+    try {
+      const inc = await addIncident({
         title: `${data.type} Report`,
         type: data.type,
         buildingId: data.buildingId,
@@ -66,39 +68,71 @@ export default function ReportEmergency() {
         reporterName: data.reporterName,
         reporterContact: data.reporterContact,
       });
-      setIsSubmitting(false);
+      setCreatedIncidentId(inc.id);
+      if (inc.aiAnalysis?.risk_assessment) {
+        setCreatedIncidentScore(inc.aiAnalysis.risk_assessment.risk_score);
+        setCreatedIncidentPriority(inc.aiAnalysis.risk_assessment.priority);
+      }
       setIsSuccess(true);
-    }, 800);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isSuccess) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-2xl mx-auto p-6 text-center">
-        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6 border-4 border-green-50">
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6 border-4 border-green-50 shadow-sm">
           <CheckCircle size={40} className="text-green-600" />
         </div>
-        <h2 className="text-3xl font-bold text-slate-900 mb-4">
+        <h2 className="text-3xl font-bold text-slate-900 mb-2">
           Emergency Reported
         </h2>
-        <p className="text-lg text-slate-600 mb-8">
-          The incident has been successfully logged and response teams have been
-          notified via the command center.
+        <p className="text-base text-slate-600 mb-6">
+          The incident has been logged and the Emergency Coordinator has received the alert.
         </p>
-        <div className="flex gap-4">
+
+        {createdIncidentPriority && (
+          <div className="w-full bg-slate-50 border border-slate-200 rounded-lg p-4 mb-6 text-left shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                CampusOne AI Live Triage
+              </span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">
+                AI PRIORITY: {createdIncidentPriority.toUpperCase()}
+              </span>
+            </div>
+            <p className="text-sm text-slate-700">
+              Evaluated with Risk Score <strong>{createdIncidentScore}/100</strong>. Automated responder resource matching and evacuation analysis have been delivered to the Emergency Coordinator.
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-4 justify-center">
+          {createdIncidentId && (
+            <button
+              onClick={() => navigate(`/incidents/${createdIncidentId}`)}
+              className="bg-primary hover:bg-blue-600 text-white px-6 py-2.5 rounded-md font-semibold shadow-md transition-colors"
+            >
+              View Incident Details
+            </button>
+          )}
           <button
             onClick={() => navigate("/incidents")}
-            className="bg-primary hover:bg-blue-600 text-white px-6 py-3 rounded-md font-semibold shadow-md transition-colors"
+            className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-6 py-2.5 rounded-md font-semibold shadow-sm transition-colors"
           >
-            View Incident List
+            Incident List
           </button>
           <button
             onClick={() => {
               setIsSuccess(false);
               navigate("/dashboard");
             }}
-            className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-6 py-3 rounded-md font-semibold shadow-sm transition-colors"
+            className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2.5 rounded-md font-semibold transition-colors"
           >
-            Return to Dashboard
+            Dashboard
           </button>
         </div>
       </div>

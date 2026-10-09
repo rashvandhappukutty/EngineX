@@ -60,6 +60,26 @@ async def analyze_campus_situation(req: IncidentAnalysisRequest) -> Dict[str, An
         )
 
 
+@router.get(
+    "/status",
+    summary="AI Provider Status & Configuration Info",
+    response_description="Active AI model provider and operational state",
+)
+def get_ai_status() -> Dict[str, Any]:
+    """Return active AI model provider status and safety configuration."""
+    from ai.config import DEFAULT_CONFIG
+    provider = DEFAULT_CONFIG.model.provider
+    has_gemini_key = bool(DEFAULT_CONFIG.model.gemini_api_key)
+    return {
+        "ai_enabled": settings.AI_ENABLED,
+        "nlu_provider": provider,
+        "gemini_model": DEFAULT_CONFIG.model.gemini_model if provider == "gemini" else None,
+        "gemini_configured": has_gemini_key,
+        "safety_disclaimer": settings.SAFETY_DISCLAIMER,
+        "status": "operational",
+    }
+
+
 @router.post(
     "/classify-incident",
     summary="Classify Incident and Estimate Triage Priority",
@@ -78,3 +98,5 @@ async def classify_campus_incident(req: ComplaintAnalysisRequest) -> Dict[str, A
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI classification failed: {str(exc)}",
         )
+
+

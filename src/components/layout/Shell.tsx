@@ -13,6 +13,7 @@ import {
   UserCog,
   Siren,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import { useDemo } from "../../store/demoState";
 
@@ -53,6 +54,12 @@ export default function Shell() {
       path: "/incidents",
       icon: AlertTriangle,
       roles: ["administrator", "coordinator", "security", "responder"],
+    },
+    {
+      name: "AI Decision Support",
+      path: "/recommendations",
+      icon: Sparkles,
+      roles: ["administrator", "coordinator"],
     },
     {
       name: "Campus Map",

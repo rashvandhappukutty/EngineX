@@ -14,6 +14,7 @@ import Analytics from "./pages/Analytics";
 import Users from "./pages/Users";
 import Settings from "./pages/Settings";
 import ReportEmergency from "./pages/ReportEmergency";
+import Recommendations from "./pages/Recommendations";
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/incidents/:id" element={<IncidentDetails />} />
+            <Route path="/recommendations" element={<Recommendations />} />
             <Route path="/campus-map" element={<CampusMap />} />
             <Route path="/dispatch" element={<Dispatch />} />
             <Route path="/evacuation" element={<Evacuation />} />
