@@ -1,3 +1,9 @@
+import pytest
+from unittest.mock import patch
+from app.db.models import Incident, IncidentHistory
+from tests.conftest import TestingSessionLocal
+
+
 def test_create_incident_success(client):
     payload = {
         "title": "Electrical Short in Lab 3",
@@ -15,6 +21,54 @@ def test_create_incident_success(client):
     assert data["severity"] == "High"
     assert data["status"] == "Reported"
     assert data["priority_score"] > 0.0
+
+
+def test_create_incident_produces_history_and_incident(client, db_session):
+    payload = {
+        "title": "Water Pipe Burst",
+        "description": "Flooding in basement hallway.",
+        "category": "Infrastructure",
+        "severity": "High",
+        "location_name": "Basement",
+    }
+    response = client.post("/api/v1/reports", json=payload)
+    assert response.status_code == 201
+    inc_id = response.json()["id"]
+
+    inc = db_session.query(Incident).filter(Incident.id == inc_id).first()
+    assert inc is not None
+
+    histories = db_session.query(IncidentHistory).filter(IncidentHistory.incident_id == inc_id).all()
+    assert len(histories) == 1
+    assert histories[0].new_status == "Reported"
+
+
+def test_create_incident_rollback_on_history_failure(client, db_session):
+    payload = {
+        "title": "Gas Leak in Kitchen",
+        "description": "Gas odor near stove area.",
+        "category": "Infrastructure",
+        "severity": "Critical",
+        "location_name": "Cafeteria Kitchen",
+    }
+
+    original_add = db_session.add
+
+    def mock_add(obj):
+        if isinstance(obj, IncidentHistory):
+            raise RuntimeError("Simulated DB error during IncidentHistory insertion")
+        return original_add(obj)
+
+    with pytest.raises(RuntimeError):
+        with patch.object(db_session, "add", side_effect=mock_add):
+            client.post("/api/v1/reports", json=payload)
+
+    # Query fresh session to verify atomic rollback in SQLite database
+    fresh_session = TestingSessionLocal()
+    try:
+        assert fresh_session.query(Incident).count() == 0
+    finally:
+        fresh_session.close()
 
 
 def test_create_incident_invalid_input(client):
@@ -109,6 +163,36 @@ def test_valid_incident_status_transitions(client):
     res_hist = client.get(f"/api/v1/reports/{inc_id}/history")
     assert res_hist.status_code == 200
     assert len(res_hist.json()) >= 4
+
+
+def test_incident_status_update_rollback_on_history_failure(client, db_session):
+    res_create = client.post("/api/v1/reports", json={
+        "title": "Power Line Short",
+        "description": "Sparking line behind admin block.",
+        "category": "Infrastructure",
+        "severity": "High",
+        "location_name": "Admin Block",
+    })
+    inc_id = res_create.json()["id"]
+
+    original_add = db_session.add
+
+    def mock_add(obj):
+        if isinstance(obj, IncidentHistory):
+            raise RuntimeError("Simulated history failure during status update")
+        return original_add(obj)
+
+    with pytest.raises(RuntimeError):
+        with patch.object(db_session, "add", side_effect=mock_add):
+            client.patch(f"/api/v1/reports/{inc_id}/status", json={"status": "Investigating"})
+
+    # Query fresh session to verify atomic rollback in SQLite database
+    fresh_session = TestingSessionLocal()
+    try:
+        inc = fresh_session.query(Incident).filter(Incident.id == inc_id).first()
+        assert inc.status == "Reported"
+    finally:
+        fresh_session.close()
 
 
 def test_invalid_incident_status_transition_rejection(client):

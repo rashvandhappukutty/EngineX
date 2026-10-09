@@ -1,3 +1,9 @@
+import pytest
+from unittest.mock import patch
+from app.db.models import Incident, Team, Assignment, AssignmentHistory, IncidentHistory
+from tests.conftest import TestingSessionLocal
+
+
 def test_assignment_creation_and_constraints(client):
     # Create incident
     inc_res = client.post("/api/v1/reports", json={
@@ -48,3 +54,50 @@ def test_prevent_double_assignment(client):
     res_double = client.post("/api/v1/assignments", json={"incident_id": inc2, "team_id": team})
     assert res_double.status_code == 400
     assert "active mission" in res_double.json()["detail"].lower() or "cannot accept" in res_double.json()["detail"].lower()
+
+
+def test_assignment_creation_rollback_on_history_failure(client, db_session):
+    inc = client.post("/api/v1/reports", json={
+        "title": "Water Main Rupture",
+        "description": "High pressure leak in yard.",
+        "category": "Infrastructure",
+        "severity": "High",
+        "location_name": "North Yard",
+    }).json()
+    inc_id = inc["id"]
+
+    team = client.post("/api/v1/teams", json={
+        "name": "Plumbing Maintenance Unit",
+        "capabilities": ["plumbing"],
+    }).json()
+    team_id = team["id"]
+
+    original_add = db_session.add
+
+    def mock_add(obj):
+        if isinstance(obj, AssignmentHistory):
+            raise RuntimeError("Simulated DB failure during AssignmentHistory insertion")
+        return original_add(obj)
+
+    with pytest.raises(RuntimeError):
+        with patch.object(db_session, "add", side_effect=mock_add):
+            client.post("/api/v1/assignments", json={
+                "incident_id": inc_id,
+                "team_id": team_id,
+            })
+
+    # Query fresh session to verify atomic rollback in SQLite database
+    fresh_session = TestingSessionLocal()
+    try:
+        # 1. No orphan assignment record exists
+        assert fresh_session.query(Assignment).count() == 0
+
+        # 2. Team availability remained "Available" (not changed to On_Mission)
+        team_obj = fresh_session.query(Team).filter(Team.id == team_id).first()
+        assert team_obj.availability_status == "Available"
+
+        # 3. Incident status remained "Reported" (not changed to Responding)
+        inc_obj = fresh_session.query(Incident).filter(Incident.id == inc_id).first()
+        assert inc_obj.status == "Reported"
+    finally:
+        fresh_session.close()

@@ -55,33 +55,38 @@ class HelpdeskService:
                     detail=f"Referenced location_id {req_in.location_id} does not exist",
                 )
 
-        db_req = HelpdeskRequest(
-            title=req_in.title,
-            description=req_in.description,
-            category=final_category,
-            priority=final_priority,
-            status=HelpdeskStatus.OPEN,
-            assigned_department=assigned_dept,
-            location_id=req_in.location_id,
-            location_name=req_in.location_name,
-            reporter_metadata=req_in.reporter_metadata,
-            is_emergency_flagged=is_emergency,
-        )
-        db.add(db_req)
-        db.commit()
-        db.refresh(db_req)
+        try:
+            db_req = HelpdeskRequest(
+                title=req_in.title,
+                description=req_in.description,
+                category=final_category,
+                priority=final_priority,
+                status=HelpdeskStatus.OPEN,
+                assigned_department=assigned_dept,
+                location_id=req_in.location_id,
+                location_name=req_in.location_name,
+                reporter_metadata=req_in.reporter_metadata,
+                is_emergency_flagged=is_emergency,
+            )
+            db.add(db_req)
+            db.flush()  # Obtain generated request ID atomically
 
-        # Record initial history
-        hist = HelpdeskHistory(
-            request_id=db_req.id,
-            previous_status=None,
-            new_status=HelpdeskStatus.OPEN,
-            previous_department=None,
-            new_department=assigned_dept,
-            notes="Service Request Created" + (" [EMERGENCY FLAGGED]" if is_emergency else ""),
-        )
-        db.add(hist)
-        db.commit()
+            # Record initial history
+            hist = HelpdeskHistory(
+                request_id=db_req.id,
+                previous_status=None,
+                new_status=HelpdeskStatus.OPEN,
+                previous_department=None,
+                new_department=assigned_dept,
+                notes="Service Request Created" + (" [EMERGENCY FLAGGED]" if is_emergency else ""),
+            )
+            db.add(hist)
+            db.commit()  # Single atomic commit for helpdesk request and initial history
+        except Exception:
+            db.rollback()
+            raise
+
+        db.refresh(db_req)
 
         # Broadcast event
         await notification_manager.broadcast(
@@ -141,19 +146,24 @@ class HelpdeskService:
                 detail=f"Invalid helpdesk status transition from '{req.status}' to '{update_in.status}'. Allowed: {[s.value for s in allowed]}",
             )
 
-        prev_status = req.status
-        req.status = update_in.status
+        try:
+            prev_status = req.status
+            req.status = update_in.status
 
-        hist = HelpdeskHistory(
-            request_id=req.id,
-            previous_status=prev_status,
-            new_status=update_in.status,
-            previous_department=req.assigned_department,
-            new_department=req.assigned_department,
-            notes=update_in.reason or f"Status changed from {prev_status} to {update_in.status}",
-        )
-        db.add(hist)
-        db.commit()
+            hist = HelpdeskHistory(
+                request_id=req.id,
+                previous_status=prev_status,
+                new_status=update_in.status,
+                previous_department=req.assigned_department,
+                new_department=req.assigned_department,
+                notes=update_in.reason or f"Status changed from {prev_status} to {update_in.status}",
+            )
+            db.add(hist)
+            db.commit()  # Single atomic commit for status update and history entry
+        except Exception:
+            db.rollback()
+            raise
+
         db.refresh(req)
 
         await notification_manager.broadcast(
@@ -176,19 +186,24 @@ class HelpdeskService:
         if req.assigned_department == assign_in.department:
             return req
 
-        prev_dept = req.assigned_department
-        req.assigned_department = assign_in.department
+        try:
+            prev_dept = req.assigned_department
+            req.assigned_department = assign_in.department
 
-        hist = HelpdeskHistory(
-            request_id=req.id,
-            previous_status=req.status,
-            new_status=req.status,
-            previous_department=prev_dept,
-            new_department=assign_in.department,
-            notes=assign_in.reason or f"Reassigned from {prev_dept} to {assign_in.department}",
-        )
-        db.add(hist)
-        db.commit()
+            hist = HelpdeskHistory(
+                request_id=req.id,
+                previous_status=req.status,
+                new_status=req.status,
+                previous_department=prev_dept,
+                new_department=assign_in.department,
+                notes=assign_in.reason or f"Reassigned from {prev_dept} to {assign_in.department}",
+            )
+            db.add(hist)
+            db.commit()  # Single atomic commit for department re-assignment and history entry
+        except Exception:
+            db.rollback()
+            raise
+
         db.refresh(req)
 
         await notification_manager.broadcast(

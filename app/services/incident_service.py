@@ -65,32 +65,37 @@ class IncidentService:
             has_active_location_hazards=has_hazards,
         )
 
-        db_incident = Incident(
-            title=incident_in.title,
-            description=incident_in.description,
-            category=final_category,
-            severity=final_severity,
-            status=IncidentStatus.REPORTED,
-            location_id=incident_in.location_id,
-            location_name=incident_in.location_name,
-            reporter_metadata=incident_in.reporter_metadata,
-            priority_score=priority,
-            ai_suggested_category=suggested_cat if ai_model else None,
-            ai_confidence=confidence,
-        )
-        db.add(db_incident)
-        db.commit()
-        db.refresh(db_incident)
+        try:
+            db_incident = Incident(
+                title=incident_in.title,
+                description=incident_in.description,
+                category=final_category,
+                severity=final_severity,
+                status=IncidentStatus.REPORTED,
+                location_id=incident_in.location_id,
+                location_name=incident_in.location_name,
+                reporter_metadata=incident_in.reporter_metadata,
+                priority_score=priority,
+                ai_suggested_category=suggested_cat if ai_model else None,
+                ai_confidence=confidence,
+            )
+            db.add(db_incident)
+            db.flush()  # Obtain generated incident ID atomically without committing transaction
 
-        # Record initial history
-        history_entry = IncidentHistory(
-            incident_id=db_incident.id,
-            previous_status=None,
-            new_status=IncidentStatus.REPORTED,
-            change_reason="Initial Incident Report Created",
-        )
-        db.add(history_entry)
-        db.commit()
+            # Record initial history
+            history_entry = IncidentHistory(
+                incident_id=db_incident.id,
+                previous_status=None,
+                new_status=IncidentStatus.REPORTED,
+                change_reason="Initial Incident Report Created",
+            )
+            db.add(history_entry)
+            db.commit()  # Single atomic commit for incident and initial history
+        except Exception:
+            db.rollback()
+            raise
+
+        db.refresh(db_incident)
 
         # Broadcast via WebSockets asynchronously
         await notification_manager.broadcast(
@@ -155,18 +160,23 @@ class IncidentService:
                 ),
             )
 
-        prev_status = incident.status
-        incident.status = update_in.status
+        try:
+            prev_status = incident.status
+            incident.status = update_in.status
 
-        # Save history
-        history_entry = IncidentHistory(
-            incident_id=incident.id,
-            previous_status=prev_status,
-            new_status=update_in.status,
-            change_reason=update_in.reason or f"Status changed from {prev_status} to {update_in.status}",
-        )
-        db.add(history_entry)
-        db.commit()
+            # Save history
+            history_entry = IncidentHistory(
+                incident_id=incident.id,
+                previous_status=prev_status,
+                new_status=update_in.status,
+                change_reason=update_in.reason or f"Status changed from {prev_status} to {update_in.status}",
+            )
+            db.add(history_entry)
+            db.commit()  # Single atomic commit for status update and history entry
+        except Exception:
+            db.rollback()
+            raise
+
         db.refresh(incident)
 
         # Broadcast via WebSockets

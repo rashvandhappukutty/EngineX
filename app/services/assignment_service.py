@@ -60,42 +60,46 @@ class AssignmentService:
                 detail=f"Team '{team.name}' is currently on an active mission and cannot accept concurrent assignments.",
             )
 
-        # Create Assignment record
-        assignment = Assignment(
-            incident_id=incident.id,
-            team_id=team.id,
-            status=AssignmentStatus.ASSIGNED,
-            notes=assignment_in.notes or f"Team '{team.name}' assigned to Incident #{incident.id}",
-        )
-        db.add(assignment)
-        db.commit()
-        db.refresh(assignment)
-
-        # Log Assignment History
-        hist = AssignmentHistory(
-            assignment_id=assignment.id,
-            previous_status=None,
-            new_status=AssignmentStatus.ASSIGNED,
-            notes=assignment.notes,
-        )
-        db.add(hist)
-
-        # Update Team availability to ON_MISSION
-        team.availability_status = TeamAvailabilityStatus.ON_MISSION
-
-        # Update Incident status to Responding if reported or investigating
-        if incident.status in (IncidentStatus.REPORTED, IncidentStatus.INVESTIGATING):
-            prev_status = incident.status
-            incident.status = IncidentStatus.RESPONDING
-            inc_hist = IncidentHistory(
+        try:
+            # Create Assignment record
+            assignment = Assignment(
                 incident_id=incident.id,
-                previous_status=prev_status,
-                new_status=IncidentStatus.RESPONDING,
-                change_reason=f"Response Team '{team.name}' assigned (Assignment #{assignment.id})",
+                team_id=team.id,
+                status=AssignmentStatus.ASSIGNED,
+                notes=assignment_in.notes or f"Team '{team.name}' assigned to Incident #{incident.id}",
             )
-            db.add(inc_hist)
+            db.add(assignment)
+            db.flush()  # Obtain generated assignment ID atomically
 
-        db.commit()
+            # Log Assignment History
+            hist = AssignmentHistory(
+                assignment_id=assignment.id,
+                previous_status=None,
+                new_status=AssignmentStatus.ASSIGNED,
+                notes=assignment.notes,
+            )
+            db.add(hist)
+
+            # Update Team availability to ON_MISSION
+            team.availability_status = TeamAvailabilityStatus.ON_MISSION
+
+            # Update Incident status to Responding if reported or investigating
+            if incident.status in (IncidentStatus.REPORTED, IncidentStatus.INVESTIGATING):
+                prev_status = incident.status
+                incident.status = IncidentStatus.RESPONDING
+                inc_hist = IncidentHistory(
+                    incident_id=incident.id,
+                    previous_status=prev_status,
+                    new_status=IncidentStatus.RESPONDING,
+                    change_reason=f"Response Team '{team.name}' assigned (Assignment #{assignment.id})",
+                )
+                db.add(inc_hist)
+
+            db.commit()  # Single atomic commit for Assignment, AssignmentHistory, Team status, and Incident status
+        except Exception:
+            db.rollback()
+            raise
+
         db.refresh(assignment)
 
         # Broadcast event
@@ -128,31 +132,36 @@ class AssignmentService:
                 detail=f"Invalid assignment status transition from '{assignment.status}' to '{update_in.status}'. Allowed: {[s.value for s in allowed]}",
             )
 
-        prev_status = assignment.status
-        assignment.status = update_in.status
+        try:
+            prev_status = assignment.status
+            assignment.status = update_in.status
 
-        # History log
-        hist = AssignmentHistory(
-            assignment_id=assignment.id,
-            previous_status=prev_status,
-            new_status=update_in.status,
-            notes=update_in.notes or f"Status updated from {prev_status} to {update_in.status}",
-        )
-        db.add(hist)
+            # History log
+            hist = AssignmentHistory(
+                assignment_id=assignment.id,
+                previous_status=prev_status,
+                new_status=update_in.status,
+                notes=update_in.notes or f"Status updated from {prev_status} to {update_in.status}",
+            )
+            db.add(hist)
 
-        # If completed or cancelled, check if team can be marked Available again
-        if update_in.status in (AssignmentStatus.COMPLETED, AssignmentStatus.CANCELLED):
-            team = db.query(Team).filter(Team.id == assignment.team_id).first()
-            if team:
-                remaining_active = db.query(Assignment).filter(
-                    Assignment.team_id == team.id,
-                    Assignment.id != assignment.id,
-                    Assignment.status.in_([AssignmentStatus.ASSIGNED, AssignmentStatus.DISPATCHED, AssignmentStatus.ON_SCENE]),
-                ).count()
-                if remaining_active == 0 and team.availability_status == TeamAvailabilityStatus.ON_MISSION:
-                    team.availability_status = TeamAvailabilityStatus.AVAILABLE
+            # If completed or cancelled, check if team can be marked Available again
+            if update_in.status in (AssignmentStatus.COMPLETED, AssignmentStatus.CANCELLED):
+                team = db.query(Team).filter(Team.id == assignment.team_id).first()
+                if team:
+                    remaining_active = db.query(Assignment).filter(
+                        Assignment.team_id == team.id,
+                        Assignment.id != assignment.id,
+                        Assignment.status.in_([AssignmentStatus.ASSIGNED, AssignmentStatus.DISPATCHED, AssignmentStatus.ON_SCENE]),
+                    ).count()
+                    if remaining_active == 0 and team.availability_status == TeamAvailabilityStatus.ON_MISSION:
+                        team.availability_status = TeamAvailabilityStatus.AVAILABLE
 
-        db.commit()
+            db.commit()  # Single atomic commit for status update, history log, and team availability reset
+        except Exception:
+            db.rollback()
+            raise
+
         db.refresh(assignment)
 
         await notification_manager.broadcast(
