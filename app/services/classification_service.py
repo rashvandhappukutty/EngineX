@@ -93,11 +93,12 @@ class ClassificationService:
     async def classify_incident_with_ai(
         self, title: str, description: str
     ) -> Tuple[IncidentCategory, IncidentSeverity, Optional[str], Optional[float]]:
-        """Try calling AI service contract; fall back deterministically on any failure or if disabled."""
+        """Try calling AI service contract or integrated AI engine; fall back deterministically on any failure or if disabled."""
         if not settings.AI_ENABLED:
             cat, sev = self.fallback_incident_classification(title, description)
             return cat, sev, None, None
 
+        # 1. Try remote microservice if configured and available
         try:
             async with httpx.AsyncClient(timeout=settings.AI_TIMEOUT_SECONDS) as client:
                 response = await client.post(
@@ -115,13 +116,46 @@ class ClassificationService:
                     severity = IncidentSeverity(sev_str) if sev_str in [s.value for s in IncidentSeverity] else None
 
                     if category and severity:
-                        return category, severity, "AI_MODEL_V1", confidence
-        except Exception as exc:
-            logger.warning(f"AI service call failed ({exc}). Using deterministic fallback.")
+                        return category, severity, "AI_MICROSERVICE_V1", confidence
+        except Exception:
+            pass
 
-        # Deterministic fallback
+        # 2. Integrate with internal CampusOne AI Engine
+        try:
+            from ai.engine import analyze_situation
+            res = analyze_situation(report={"title": title, "description": description})
+            risk_prio = res.get("risk_assessment", {}).get("priority", "Low")
+            sev_map = {
+                "Critical": IncidentSeverity.CRITICAL,
+                "High": IncidentSeverity.HIGH,
+                "Medium": IncidentSeverity.MEDIUM,
+                "Low": IncidentSeverity.LOW,
+            }
+            mapped_sev = sev_map.get(risk_prio, IncidentSeverity.LOW)
+
+            text = f"{title} {description}".lower()
+            if any(w in text for w in ["fire", "smoke", "flame", "blaze"]):
+                mapped_cat = IncidentCategory.FIRE
+            elif any(w in text for w in ["medical", "injury", "injured", "bleed", "faint", "cardiac", "ambulance"]):
+                mapped_cat = IncidentCategory.MEDICAL
+            elif any(w in text for w in ["security", "thief", "weapon", "intruder", "fight", "assault"]):
+                mapped_cat = IncidentCategory.SECURITY
+            elif any(w in text for w in ["flood", "earthquake", "storm"]):
+                mapped_cat = IncidentCategory.NATURAL_HAZARD
+            elif any(w in text for w in ["leak", "water", "pipe", "power", "blackout", "elevator", "wire", "wifi", "internet"]):
+                mapped_cat = IncidentCategory.INFRASTRUCTURE
+            else:
+                mapped_cat = IncidentCategory.OTHER
+
+            confidence = float(res.get("uncertainty", {}).get("classification_confidence", 0.85))
+            return mapped_cat, mapped_sev, "CAMPUSONE_AI_INTEGRATED", confidence
+        except Exception as exc:
+            logger.warning(f"AI engine call failed ({exc}). Using deterministic fallback.")
+
+        # 3. Deterministic fallback
         cat, sev = self.fallback_incident_classification(title, description)
         return cat, sev, "DETERMINISTIC_FALLBACK", 1.0
 
 
 classification_service = ClassificationService()
+

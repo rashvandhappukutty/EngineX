@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.database import init_db
 from app.routers import (
+    ai,
     health,
     incidents,
     teams,
@@ -83,6 +84,7 @@ def root():
 
 # Include Routers under API_V1_STR prefix (/api/v1)
 app.include_router(health.router, prefix=settings.API_V1_STR)
+app.include_router(ai.router, prefix=settings.API_V1_STR)
 app.include_router(incidents.router, prefix=settings.API_V1_STR)
 app.include_router(teams.router, prefix=settings.API_V1_STR)
 app.include_router(campus.router, prefix=settings.API_V1_STR)
@@ -91,3 +93,4 @@ app.include_router(helpdesk.router, prefix=settings.API_V1_STR)
 app.include_router(assignments.router, prefix=settings.API_V1_STR)
 app.include_router(dashboard.router, prefix=settings.API_V1_STR)
 app.include_router(notifications.router, prefix=settings.API_V1_STR)
+
