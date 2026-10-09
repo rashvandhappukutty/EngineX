@@ -59,7 +59,7 @@ CATEGORY_KEYWORDS: Dict[ComplaintCategory, Dict[str, float]] = {
         "theft": 4.0, "stolen": 4.0, "stealing": 3.5, "lost and found": 3.0,
         "cctv": 3.5, "surveillance": 3.0, "harassment": 4.0, "ragging": 4.5,
         "brawl": 4.0, "vandalism": 3.5, "curfew": 2.5, "hostel entry": 2.5,
-        "suspicious person": 4.0, "weapon": 4.5,
+        "suspicious person": 4.0, "weapon": 4.5, "suspicious package": 4.5,
     },
     ComplaintCategory.ACADEMIC_ADMINISTRATION: {
         "marksheet": 3.5, "transcript": 3.5, "grade card": 3.5, "grade": 2.5,
@@ -104,6 +104,7 @@ CRITICAL_SAFETY_KEYWORDS: Set[str] = {
     "unconscious", "breathing difficulty", "cardiac", "heart attack", "seizure",
     "severe bleeding", "active brawl", "weapon", "active shooter", "ragging",
     "structural collapse", "ceiling collapse", "poisoning", "ambulance",
+    "flooding", "flood", "flash flood", "earthquake", "building collapse",
 }
 
 HIGH_SAFETY_KEYWORDS: Set[str] = {
@@ -112,6 +113,7 @@ HIGH_SAFETY_KEYWORDS: Set[str] = {
     "harassment", "assault", "trespassing", "intruder", "theft", "threat",
     "choking", "fume leak", "hazardous", "contaminated water",
     "elevator stuck", "lift stuck", "trapped in lift", "trapped in elevator",
+    "heavy rain floods", "storm damage", "snake", "wildlife incursion",
 }
 
 BENIGN_SAFETY_CONTEXTS: List[str] = [
@@ -143,6 +145,11 @@ DISRUPTION_KEYWORDS: Dict[str, int] = {
     "assistance needed": 15,
     "stuck between": 20,
     "trapped": 20,
+    "floods": 25,
+    "flooding": 25,
+    "submerged": 25,
+    "blocking vehicles": 20,
+    "heavy rain": 20,
 }
 
 # ---------------------------------------------------------------------------
@@ -198,12 +205,15 @@ CRITICAL_LOCATIONS: Dict[str, int] = {
     "cafeteria": 10,
     "canteen": 10,
     "auditorium": 10,
+    "main entrance": 15,
+    "entrance gate": 15,
 }
 
-# Base score per category for normal operational items
 CATEGORY_BASE_SCORES: Dict[ComplaintCategory, int] = {
     ComplaintCategory.MEDICAL_AND_SAFETY: 65,
     ComplaintCategory.SECURITY: 55,
+    ComplaintCategory.NEEDS_ASSESSMENT: 50,
+    ComplaintCategory.OTHER: 40,
     ComplaintCategory.LABORATORY: 45,
     ComplaintCategory.MAINTENANCE_AND_ELECTRICAL: 40,
     ComplaintCategory.IT_AND_NETWORK: 35,
@@ -212,10 +222,6 @@ CATEGORY_BASE_SCORES: Dict[ComplaintCategory, int] = {
     ComplaintCategory.HOUSEKEEPING_AND_SANITATION: 25,
     ComplaintCategory.GENERAL_UNKNOWN: 20,
 }
-
-# ---------------------------------------------------------------------------
-# Priority Score Thresholds
-# ---------------------------------------------------------------------------
 
 SCORE_THRESHOLDS = {
     PriorityLevel.CRITICAL: 80,
