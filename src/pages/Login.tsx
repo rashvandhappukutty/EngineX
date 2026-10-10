@@ -113,7 +113,7 @@ export default function Login() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="operator@enginex.campus.edu"
+                  placeholder="sreeshinestudio@gmail.com"
                   className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-brand-400"
                 />
               </div>

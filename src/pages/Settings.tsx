@@ -138,7 +138,7 @@ export default function Settings() {
                       <input
                         type="text"
                         className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-brand-400 font-mono"
-                        defaultValue="+91 (0421) 222-1111"
+                        defaultValue="9524780695"
                       />
                     </div>
                     <div className="space-y-1.5">
